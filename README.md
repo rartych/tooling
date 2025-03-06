@@ -20,7 +20,7 @@ Repository to develop and provide tooling across the CAMARA project and its API 
 * Tooling for CAMARA API Repositories to accelerate and simplify the development, testing and validation of CAMARA APIs
 * The repository provides the API repositories with :  
   * Github Actions caller workflows to be added to `.github/workflows` folder of the API repository.
-  * Github Actions [reusable workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) for linting API and test definitions, along with other automations.
+  * Github Actions [reusable workflows](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) for linting API specifications and test definitions, along with other automations.
   * Configuration files and documentation for the reusable workflows.
 * Started: February 2025
 <!-- * Incubated since: §incubation date$ --> 

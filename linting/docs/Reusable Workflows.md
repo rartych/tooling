@@ -36,9 +36,12 @@ Manual run of this workflow produces more detailed output compared to results pr
 
 ### Workflow configuration files in `linting` folder
 
-Configuration files in `/linting/config/`.
+Configuration files in `/linting/config/`:
+- **.gherkin-lintrc** - ruleset for [gherkin-lint](https://github.com/gherkin-lint/gherkin-lint) tool
+- **.spectral.yaml** - CAMARA rulest for [Spectral](https://meta.stoplight.io/docs/spectral) linter
+- **.yamllint.yml** - ruleset for [yamllint](https://yamllint.readthedocs.io/en/stable/index.html) tool
 
-
+The rulesets above are copied from [Commonalities/artifacts](https://github.com/camaraproject/Commonalities/tree/main/artifacts/linting_rules).
 
 
 ### Caller Workflows in `linting` folder
@@ -47,6 +50,10 @@ Caller workflows are stored in `/linting/workflows/`.
 Currenly definded workflows:
 - **pr_validation_caller.yml** - caller for PR validation workflow
 - **spectral-oas-caller.yml** - caller for Spectral linter with CAMARA ruleset
+
+
+
+## Setting Up Linting Workflows
 
 ### API Repository Structure
 
@@ -59,9 +66,30 @@ API-repository/
 
 ```
 
-## Setting Up Linting Workflows
+### Deployment of Caller Workflows
 
+Caller workflows need to be placed in `.github/workflows` folder of API repository. This is the **only** required action.
 
+```
+API-repository/
+├── .github/workflows/
+   ├── pr_validation_caller.yml
+   └── spectral-oas-caller.yml 
+```
+    
+The job input parameter `configurations` in caller workflows allows to specify the branch of the `tooling` repository from which the configuration files stored in `/linting/config/` are applied in the reusable workflows. 
+By default, the main branch of tooling is used.
 
+```yaml
+#    with:
+#      configurations: staging
+```
+This way custom configurations can be used (if needed by given repository or for canary deployment of new configurations) - first the relevant branch needs to be created in the `tooling` repository.
 
 ## Runnig Linting Workflows
+
+###  PR validation
+This workflow is triggered for each Pull Request in API Repository.
+
+### Manual execution of Spectral linting with CAMARA ruleset
+This workflow can be triggered manually  (on `workflow_dispatch') from Actions menu of Github repository.

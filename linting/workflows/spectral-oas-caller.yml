@@ -1,0 +1,22 @@
+name: Caller for Spectral linting with CAMARA ruleset
+
+on: 
+  workflow_dispatch:
+
+# env: 
+#   branch_name: v2  
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  contents: write
+  issues: write
+
+jobs:
+  spectral:
+    uses: rartych/xCAMARA-tooling/.github/workflows/spectral-oas.yml@main
+    with:
+      ref: main

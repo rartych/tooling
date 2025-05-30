@@ -2,11 +2,11 @@
 
 ## `linting` Folder Content
 
-Caller workflows are stored in [workflows](/workflows) folder.
+Caller workflows are stored in [workflows](/linting/workflows) folder.
 
-Configuration files are in [config](/config) folder.
+Configuration files are in [config](/linting/config) folder.
 
-Documentation for linting workflows is in [docs](/docs) folder.
+Documentation for linting workflows is in [docs](/linting/docs) folder.
 
 ```
 tooling/

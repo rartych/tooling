@@ -90,7 +90,7 @@ This way custom configurations can be used (if needed by given repository or for
 
 ###  PR validation
 This workflow is triggered for each Pull Request in API Repository.
-Additional job (to be defined) is executed for PRs modifying CHANGLOG.md file (like Release PRs).
+Additional job (to be defined) is executed for PRs modifying CHANGELOG.md file (like Release PRs).
 
 
 ### Manual execution of Spectral linting with CAMARA ruleset

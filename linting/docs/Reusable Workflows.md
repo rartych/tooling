@@ -26,10 +26,10 @@ Reusable workflows are stored in the `tooling` repository under `.github/workflo
 
 Currenly definded workflows:
 
-- **pr_validation.yml** - workflow to check PR related to API definition (OpenaAPI specification, Gherkin test definitions) using Megalinter
+- **pr_validation.yml** - workflow to check the PR is related to API definition (OpenAPI specification, Gherkin test definitions) using Megalinter
 [Megalinter](https://megalinter.io) is a comprehensive linting tool designed to analyze and improve code quality across multiple programming languages and file types.
-Megalinter combines dozens of popular linters into a single tool, allowing to check code quality, formatting, security issues, and best practices across entire repository.
-Additional checks can be performed for Relase PRs (tbd).
+Megalinter combines dozens of popular linters into a single tool, allowing to check code quality, formatting, security issues, and best practices across an entire repository.
+Additional checks can be performed for Release PRs (tbd).
 
 - **spectral-oas.yml** - workflow to manually trigger [Spectral](https://meta.stoplight.io/docs/spectral) linter for OpenAPI with CAMARA ruleset.
 Manual run of this workflow produces more detailed output compared to results presented by Megalinter.
@@ -68,7 +68,7 @@ API-repository/
 
 ### Deployment of Caller Workflows
 
-Caller workflows need to be placed in `.github/workflows` folder of API repository. This is the **only** required action.
+Caller workflows need to be placed in  the `.github/workflows` folder of the API repository. This is the **only** required action.
 
 ```
 API-repository/
@@ -89,7 +89,7 @@ This way custom configurations can be used (if needed by given repository or for
 ## Runnig Linting Workflows
 
 ###  PR validation
-This workflow is triggered for each Pull Request in API Repository.
+This workflow is triggered for each Pull Request in the API Repository.
 Additional job (to be defined) is executed for PRs modifying CHANGELOG.md file (like Release PRs).
 
 

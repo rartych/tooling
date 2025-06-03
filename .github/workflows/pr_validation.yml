@@ -1,0 +1,106 @@
+name: PR validation for CAMARA Project
+# A reusable action for validating PRs using tools configuration from branch indicated by input `configurations` variable
+# CAMARA Project - Github Action for Pull Reqests
+# initial version
+
+on:
+  workflow_call:
+    # For a workflow to be reusable, the values for on must include workflow_call
+    inputs:
+      configurations:
+        description: The branch, tag, or commit to check out - containing tool configs to be used
+        type: string
+        required: false
+        default: main
+
+jobs:
+  general:
+    name: MegaLinter
+    runs-on: ubuntu-latest
+    permissions:
+      # Give the default GITHUB_TOKEN write permission to commit and push, comment issues & post new PR
+      # Remove the ones you do not need
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout linting config
+        uses: actions/checkout@v4
+        with:
+          repository: camaraproject/tooling
+          path: lint-config
+          ref: ${{ inputs.configurations }}
+          sparse-checkout: |
+            linting/config/
+          sparse-checkout-cone-mode: false
+      - name: Copy specified folder to workspace root
+        run: cp -RT ${{ github.workspace }}/lint-config/linting/config ${{ github.workspace }}
+      - name: MegaLinter
+        id: ml
+        # You can override MegaLinter flavor used to have faster performances
+        # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters
+        uses: oxsecurity/megalinter/flavors/c_cpp@v8
+        # configuration of Megalinter
+        env:
+          VALIDATE_ALL_CODEBASE: true
+          PRINT_ALPACA: false
+          # LINTER_RULES_PATH: ${{ github.workspace }}/lint-config/linting/config
+          DISABLE: COPYPASTE,SPELL,JAVASCRIPT,MARKDOWN
+          DISABLE_LINTERS: YAML_PRETTIER,REPOSITORY_GRYPE,REPOSITORY_SEMGREP,REPOSITORY_DEVSKIM,REPOSITORY_KICS,REPOSITORY_TRIVY,REPOSITORY_TRIVY_SBOM,REPOSITORY_TRUFFLEHOG,REPOSITORY_CHECKOV,REPOSITORY_GITLEAKS,YAML_V8R,JAVA_PMD
+          API_SPECTRAL_CONFIG_FILE: .spectral.yaml
+          YAML_YAMLLINT_CONFIG_FILE: .yamllint.yaml
+          GHERKIN_GHERKIN_LINT_CONFIG_FILE: .gherkin-lintrc
+          API_SPECTRAL_FILTER_REGEX_INCLUDE: (code/API_definitions/)
+          YAML_YAMLLINT_FILTER_REGEX_INCLUDE: (code/API_definitions/)
+          GHERKIN_GHERKIN_LINT_FILTER_REGEX_INCLUDE: (code/Test_definitions/)
+      - name: Archive production artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MegaLinter reports
+          include-hidden-files: "true"
+          path: |
+            megalinter-reports
+            mega-linter.log
+
+ # Job that runs only when changelog is updated
+  changelog-changed-job:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    
+    - name: Check if changelog was updated
+      id: changelog-changed
+      uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46 
+      with:
+        files: |
+          CHANGELOG.MD
+          CHANGELOG.md
+    
+    - name: Custom job logic
+      if: steps.changelog-changed.outputs.any_changed == 'true'
+      run: |
+        echo "🚀 Changelog was updated! Running custom job..."
+        
+        # Add your custom logic here
+        echo "Performing custom actions:"
+        echo "✅ Step 1: Custom processing"
+        echo "✅ Step 2: Your business logic"
+        echo "✅ Step 3: Additional operations"
+        
+        # Example: Parse changelog for latest entry
+        echo "Latest changelog entry:"
+        head -20 CHANGELOG.md || head -20 CHANGELOG.md || echo "No changelog found"
+    
+    - name: Skip message
+      if: steps.changelog-changed.outputs.any_changed != 'true'
+      run: |
+        echo "ℹ️ Changelog not updated, skipping custom job"

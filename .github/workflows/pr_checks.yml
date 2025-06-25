@@ -153,8 +153,7 @@ jobs:
             esac
             
             FILES_LIST+="$emoji \`$filename\` ($status: +$additions/-$deletions)
-"
-            
+
             # Collect file extension stats
             ext="${filename##*.}"
             if [ "$ext" != "$filename" ]; then

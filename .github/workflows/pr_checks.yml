@@ -179,9 +179,9 @@ jobs:
           echo "$FILES_LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
           
-          echo "ext_stats<<EOF" >> $GITHUB_OUTPUT
-          echo "$EXT_STATS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # echo "ext_stats<<EOF" >> $GITHUB_OUTPUT
+          # echo "$EXT_STATS" >> $GITHUB_OUTPUT
+          # echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Post results to issue
         if: steps.extract_pr.outputs.skip != 'true'

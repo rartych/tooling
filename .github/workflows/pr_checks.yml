@@ -226,12 +226,6 @@ jobs:
               - **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
               ### 📁 Changed Files
               ${{ steps.pr_details.outputs.files_list }}  
-              <details>
-              <summary>📈 File Type Statistics</summary>
-              \`\`\`
-              ${{ steps.pr_details.outputs.ext_stats }}
-              \`\`\`
-              </details>
               ---
               *Analysis completed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')*  
               *Workflow: [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"

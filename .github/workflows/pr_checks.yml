@@ -227,7 +227,6 @@ jobs:
               ### 📁 Changed Files
               ${{ steps.pr_details.outputs.files_list }}  
               ---
-              *Analysis completed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')*  
               *Workflow: [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
           fi
           

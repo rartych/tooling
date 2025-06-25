@@ -1,0 +1,401 @@
+# .github/workflows/pr-files-analyzer.yml
+name: PR Files Analyzer
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_url:
+        description: 'Pull Request URL (e.g., https://github.com/owner/repo/pull/123)'
+        required: true
+        type: string
+      issue_number:
+        description: 'Issue number to update'
+        required: true
+        type: string
+
+permissions:
+  issues: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  analyze-pr-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract PR info from input or comment
+        id: extract_pr
+        run: |
+          # Function to extract PR info from URL
+          extract_pr_info() {
+            local url="$1"
+            # Extract owner, repo, and PR number from GitHub PR URL
+            if [[ $url =~ https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
+              echo "owner=${BASH_REMATCH[1]}"
+              echo "repo=${BASH_REMATCH[2]}"
+              echo "pr_number=${BASH_REMATCH[3]}"
+              echo "valid=true"
+            else
+              echo "valid=false"
+            fi
+          }
+          
+          # Determine source of PR URL and issue number
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual trigger
+            PR_URL="${{ github.event.inputs.pr_url }}"
+            ISSUE_NUMBER="${{ github.event.inputs.issue_number }}"
+          elif [ "${{ github.event_name }}" == "issue_comment" ]; then
+            # Comment trigger - look for PR URL in comment
+            COMMENT_BODY="${{ github.event.comment.body }}"
+            PR_URL=$(echo "$COMMENT_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+            
+            # Only proceed if comment contains "/analyze-pr" command
+            if [[ ! "$COMMENT_BODY" =~ /analyze-pr ]]; then
+              echo "Comment doesn't contain /analyze-pr command, skipping..."
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          else
+            # Issue opened/labeled - look for PR URL in issue body
+            ISSUE_BODY="${{ github.event.issue.body }}"
+            PR_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          fi
+          
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          
+          if [ -z "$PR_URL" ]; then
+            echo "No PR URL found, skipping..."
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          
+          # Extract PR information
+          eval $(extract_pr_info "$PR_URL")
+          
+          if [ "$valid" != "true" ]; then
+            echo "Invalid PR URL format: $PR_URL"
+            echo "error=Invalid PR URL format" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "pr_owner=$owner" >> $GITHUB_OUTPUT
+          echo "pr_repo=$repo" >> $GITHUB_OUTPUT
+          echo "pr_number=$pr_number" >> $GITHUB_OUTPUT
+          echo "Skip: false, PR: $owner/$repo#$pr_number, Issue: $ISSUE_NUMBER"
+
+      - name: Get PR details and files
+        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == ''
+        id: pr_details
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_OWNER="${{ steps.extract_pr.outputs.pr_owner }}"
+          PR_REPO="${{ steps.extract_pr.outputs.pr_repo }}"
+          PR_NUMBER="${{ steps.extract_pr.outputs.pr_number }}"
+          
+          # Get PR details
+          PR_DATA=$(curl -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER")
+          
+          # Check if PR exists
+          if echo "$PR_DATA" | jq -e '.message == "Not Found"' > /dev/null; then
+            echo "error=PR not found or not accessible" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Extract PR info
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
+          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
+          PR_CREATED=$(echo "$PR_DATA" | jq -r '.created_at')
+          PR_UPDATED=$(echo "$PR_DATA" | jq -r '.updated_at')
+          ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
+          DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
+          CHANGED_FILES_COUNT=$(echo "$PR_DATA" | jq -r '.changed_files')
+          HEAD_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
+          
+          # Get list of changed files
+          FILES_DATA=$(curl -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER/files")
+          
+          # Process files data
+          FILES_LIST=""
+          FILE_STATS=""
+          
+          while IFS= read -r file; do
+            filename=$(echo "$file" | jq -r '.filename')
+            status=$(echo "$file" | jq -r '.status')
+            additions=$(echo "$file" | jq -r '.additions')
+            deletions=$(echo "$file" | jq -r '.deletions')
+            changes=$(echo "$file" | jq -r '.changes')
+            
+            # Determine emoji based on file status
+            case $status in
+              "added") emoji="🆕" ;;
+              "removed") emoji="🗑️" ;;
+              "modified") emoji="📝" ;;
+              "renamed") emoji="🔄" ;;
+              *) emoji="📄" ;;
+            esac
+            
+            FILES_LIST+="$emoji \`$filename\` ($status: +$additions/-$deletions)
+"
+            
+            # Collect file extension stats
+            ext="${filename##*.}"
+            if [ "$ext" != "$filename" ]; then
+              FILE_STATS+="$ext "
+            fi
+          done < <(echo "$FILES_DATA" | jq -c '.[]')
+          
+          # Count file extensions
+          EXT_STATS=$(echo "$FILE_STATS" | tr ' ' '\n' | sort | uniq -c | sort -nr | head -5)
+          
+          # Save outputs
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr_state=$PR_STATE" >> $GITHUB_OUTPUT
+          echo "pr_author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+          echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          echo "pr_base=$PR_BASE" >> $GITHUB_OUTPUT
+          echo "pr_created=$PR_CREATED" >> $GITHUB_OUTPUT
+          echo "pr_updated=$PR_UPDATED" >> $GITHUB_OUTPUT
+          echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
+          echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
+          echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+          
+          echo "files_list<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES_LIST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "ext_stats<<EOF" >> $GITHUB_OUTPUT
+          echo "$EXT_STATS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "files_data<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES_DATA" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download changed files
+        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == '' && steps.pr_details.outputs.error == ''
+        id: download_files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_OWNER="${{ steps.extract_pr.outputs.pr_owner }}"
+          PR_REPO="${{ steps.extract_pr.outputs.pr_repo }}"
+          HEAD_SHA="${{ steps.pr_details.outputs.head_sha }}"
+          
+          # Create download directory
+          DOWNLOAD_DIR="downloaded_files"
+          mkdir -p "$DOWNLOAD_DIR"
+          
+          # Initialize counters
+          DOWNLOADED_COUNT=0
+          FAILED_COUNT=0
+          TOTAL_SIZE=0
+          DOWNLOAD_SUMMARY=""
+          
+          echo "📥 Starting file downloads..."
+          
+          while IFS= read -r file; do
+            filename=$(echo "$file" | jq -r '.filename')
+            status=$(echo "$file" | jq -r '.status')
+            
+            # Skip removed files (they don't exist in the new version)
+            if [ "$status" = "removed" ]; then
+              echo "⏭️  Skipping removed file: $filename"
+              DOWNLOAD_SUMMARY+="⏭️ \`$filename\` (removed - skipped)
+"
+              continue
+            fi
+            
+            echo "📥 Downloading: $filename"
+            
+            # Create directory structure
+            dir_path=$(dirname "$filename")
+            if [ "$dir_path" != "." ]; then
+              mkdir -p "$DOWNLOAD_DIR/$dir_path"
+            fi
+            
+            # Download file from the PR head commit
+            if curl -s -f \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3.raw" \
+              -o "$DOWNLOAD_DIR/$filename" \
+              "https://api.github.com/repos/$PR_OWNER/$PR_REPO/contents/$filename?ref=$HEAD_SHA"; then
+              
+              # Get file size
+              file_size=$(stat -f%z "$DOWNLOAD_DIR/$filename" 2>/dev/null || stat -c%s "$DOWNLOAD_DIR/$filename" 2>/dev/null || echo "0")
+              TOTAL_SIZE=$((TOTAL_SIZE + file_size))
+              DOWNLOADED_COUNT=$((DOWNLOADED_COUNT + 1))
+              
+              # Format file size
+              if [ $file_size -gt 1048576 ]; then
+                size_display="$(($file_size / 1048576))MB"
+              elif [ $file_size -gt 1024 ]; then
+                size_display="$(($file_size / 1024))KB"
+              else
+                size_display="${file_size}B"
+              fi
+              
+              echo "✅ Downloaded: $filename ($size_display)"
+              DOWNLOAD_SUMMARY+="✅ \`$filename\` ($size_display)
+"
+            else
+              echo "❌ Failed to download: $filename"
+              FAILED_COUNT=$((FAILED_COUNT + 1))
+              DOWNLOAD_SUMMARY+="❌ \`$filename\` (download failed)
+"
+            fi
+          done < <(echo '${{ steps.pr_details.outputs.files_data }}' | jq -c '.[]')
+          
+          # Format total size
+          if [ $TOTAL_SIZE -gt 1048576 ]; then
+            total_size_display="$(($TOTAL_SIZE / 1048576))MB"
+          elif [ $TOTAL_SIZE -gt 1024 ]; then
+            total_size_display="$(($TOTAL_SIZE / 1024))KB"
+          else
+            total_size_display="${TOTAL_SIZE}B"
+          fi
+          
+          echo "📊 Download Summary:"
+          echo "   Downloaded: $DOWNLOADED_COUNT files"
+          echo "   Failed: $FAILED_COUNT files"
+          echo "   Total size: $total_size_display"
+          
+          # Save outputs
+          echo "downloaded_count=$DOWNLOADED_COUNT" >> $GITHUB_OUTPUT
+          echo "failed_count=$FAILED_COUNT" >> $GITHUB_OUTPUT
+          echo "total_size=$total_size_display" >> $GITHUB_OUTPUT
+          echo "download_dir=$DOWNLOAD_DIR" >> $GITHUB_OUTPUT
+          
+          echo "download_summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$DOWNLOAD_SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create file archive
+        if: steps.download_files.outputs.downloaded_count > 0
+        id: create_archive
+        run: |
+          DOWNLOAD_DIR="${{ steps.download_files.outputs.download_dir }}"
+          PR_NUMBER="${{ steps.extract_pr.outputs.pr_number }}"
+          ARCHIVE_NAME="pr-${PR_NUMBER}-files.tar.gz"
+          
+          echo "📦 Creating archive: $ARCHIVE_NAME"
+          
+          # Create compressed archive
+          tar -czf "$ARCHIVE_NAME" -C "$DOWNLOAD_DIR" .
+          
+          # Get archive size
+          archive_size=$(stat -f%z "$ARCHIVE_NAME" 2>/dev/null || stat -c%s "$ARCHIVE_NAME" 2>/dev/null || echo "0")
+          
+          # Format archive size
+          if [ $archive_size -gt 1048576 ]; then
+            archive_size_display="$(($archive_size / 1048576))MB"
+          elif [ $archive_size -gt 1024 ]; then
+            archive_size_display="$(($archive_size / 1024))KB"
+          else
+            archive_size_display="${archive_size}B"
+          fi
+          
+          echo "✅ Archive created: $ARCHIVE_NAME ($archive_size_display)"
+          
+          # Save outputs
+          echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+          echo "archive_size=$archive_size_display" >> $GITHUB_OUTPUT
+
+      - name: Post results to issue
+        if: steps.extract_pr.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUMBER="${{ steps.extract_pr.outputs.issue_number }}"
+          
+          # Check for errors
+          if [ -n "${{ steps.extract_pr.outputs.error }}" ]; then
+            COMMENT_BODY="❌ **Error analyzing PR**
+
+${{ steps.extract_pr.outputs.error }}
+
+Please provide a valid GitHub PR URL in the format: \`https://github.com/owner/repo/pull/123\`"
+          elif [ -n "${{ steps.pr_details.outputs.error }}" ]; then
+            COMMENT_BODY="❌ **Error accessing PR**
+
+${{ steps.pr_details.outputs.error }}
+
+The PR might be in a private repository or the URL might be incorrect."
+          else
+            # Format the success response
+            PR_URL="${{ steps.extract_pr.outputs.pr_url }}"
+            
+            # Format creation/update dates
+            CREATED_DATE=$(date -d "${{ steps.pr_details.outputs.pr_created }}" +'%Y-%m-%d %H:%M UTC' 2>/dev/null || echo "${{ steps.pr_details.outputs.pr_created }}")
+            UPDATED_DATE=$(date -d "${{ steps.pr_details.outputs.pr_updated }}" +'%Y-%m-%d %H:%M UTC' 2>/dev/null || echo "${{ steps.pr_details.outputs.pr_updated }}")
+            
+            COMMENT_BODY="## 📋 PR Analysis Results
+
+### 🔗 Pull Request Details
+- **Title**: ${{ steps.pr_details.outputs.pr_title }}
+- **Status**: \`${{ steps.pr_details.outputs.pr_state }}\` 
+- **Author**: @${{ steps.pr_details.outputs.pr_author }}
+- **Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\` → \`${{ steps.pr_details.outputs.pr_base }}\`
+- **Created**: $CREATED_DATE
+- **Updated**: $UPDATED_DATE
+- **Link**: [$PR_URL]($PR_URL)
+
+### 📊 Changes Summary
+- **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
+- **Lines added**: +${{ steps.pr_details.outputs.additions }}
+- **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
+
+### 📁 Changed Files
+${{ steps.pr_details.outputs.files_list }}
+
+<details>
+<summary>📈 File Type Statistics</summary>
+
+\`\`\`
+${{ steps.pr_details.outputs.ext_stats }}
+\`\`\`
+</details>
+
+---
+*Analysis completed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')*  
+*Workflow: [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
+          fi
+          
+          # Post comment
+          curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+            -d "{\"body\":$(echo "$COMMENT_BODY" | jq -Rs .)}"
+          
+          echo "Comment posted to issue #$ISSUE_NUMBER"
+
+      - name: Add analysis label
+        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == '' && steps.pr_details.outputs.error == ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Add label to indicate PR analysis was completed
+          curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ steps.extract_pr.outputs.issue_number }}/labels" \
+            -d '["pr-analyzed"]'

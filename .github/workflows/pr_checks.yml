@@ -224,9 +224,6 @@ jobs:
               - **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
               - **Lines added**: +${{ steps.pr_details.outputs.additions }}
               - **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
-              ### 📁 Changed Files
-              ${{ steps.pr_details.outputs.files_list }}  
-              *Workflow: [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
           fi
           
           # Post comment

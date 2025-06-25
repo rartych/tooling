@@ -192,55 +192,49 @@ jobs:
           
           # Check for errors
           if [ -n "${{ steps.extract_pr.outputs.error }}" ]; then
-            COMMENT_BODY="❌ **Error analyzing PR**
-
-${{ steps.extract_pr.outputs.error }}
-
-Please provide a valid GitHub PR URL in the format: \`https://github.com/owner/repo/pull/123\`"
+            COMMENT_BODY: |
+              ❌ **Error analyzing PR**
+              ${{ steps.extract_pr.outputs.error }}
+              Please provide a valid GitHub PR URL in the format: \`https://github.com/owner/repo/pull/123\`
+              
           elif [ -n "${{ steps.pr_details.outputs.error }}" ]; then
-            COMMENT_BODY="❌ **Error accessing PR**
-
-${{ steps.pr_details.outputs.error }}
-
-The PR might be in a private repository or the URL might be incorrect."
+            COMMENT_BODY: |
+              ❌ **Error accessing PR**
+              ${{ steps.pr_details.outputs.error }}
+              The PR might be in a private repository or the URL might be incorrect.
           else
-            # Format the success response
-            PR_URL="${{ steps.extract_pr.outputs.pr_url }}"
-            
-            # Format creation/update dates
+          # Format the success response
+            PR_URL="${{ steps.extract_pr.outputs.pr_url }}"            
+         
+          # Format creation/update dates
             CREATED_DATE=$(date -d "${{ steps.pr_details.outputs.pr_created }}" +'%Y-%m-%d %H:%M UTC' 2>/dev/null || echo "${{ steps.pr_details.outputs.pr_created }}")
             UPDATED_DATE=$(date -d "${{ steps.pr_details.outputs.pr_updated }}" +'%Y-%m-%d %H:%M UTC' 2>/dev/null || echo "${{ steps.pr_details.outputs.pr_updated }}")
             
-            COMMENT_BODY="## 📋 PR Analysis Results
-
-### 🔗 Pull Request Details
-- **Title**: ${{ steps.pr_details.outputs.pr_title }}
-- **Status**: \`${{ steps.pr_details.outputs.pr_state }}\` 
-- **Author**: @${{ steps.pr_details.outputs.pr_author }}
-- **Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\` → \`${{ steps.pr_details.outputs.pr_base }}\`
-- **Created**: $CREATED_DATE
-- **Updated**: $UPDATED_DATE
-- **Link**: [$PR_URL]($PR_URL)
-
-### 📊 Changes Summary
-- **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
-- **Lines added**: +${{ steps.pr_details.outputs.additions }}
-- **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
-
-### 📁 Changed Files
-${{ steps.pr_details.outputs.files_list }}
-
-<details>
-<summary>📈 File Type Statistics</summary>
-
-\`\`\`
-${{ steps.pr_details.outputs.ext_stats }}
-\`\`\`
-</details>
-
----
-*Analysis completed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')*  
-*Workflow: [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
+            COMMENT_BODY: |
+              ## 📋 PR Analysis Results
+              ### 🔗 Pull Request Details
+              - **Title**: ${{ steps.pr_details.outputs.pr_title }}
+              - **Status**: \`${{ steps.pr_details.outputs.pr_state }}\` 
+              - **Author**: @${{ steps.pr_details.outputs.pr_author }}
+              - **Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\` → \`${{ steps.pr_details.outputs.pr_base }}\`
+              - **Created**: $CREATED_DATE
+              - **Updated**: $UPDATED_DATE
+              - **Link**: [$PR_URL]($PR_URL)
+              ### 📊 Changes Summary
+              - **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
+              - **Lines added**: +${{ steps.pr_details.outputs.additions }}
+              - **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
+              ### 📁 Changed Files
+              ${{ steps.pr_details.outputs.files_list }}  
+              <details>
+              <summary>📈 File Type Statistics</summary>
+              \`\`\`
+              ${{ steps.pr_details.outputs.ext_stats }}
+              \`\`\`
+              </details>
+              ---
+              *Analysis completed at $(date -u +'%Y-%m-%d %H:%M:%S UTC')*  
+              *Workflow: [\`${{ github.workflow }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
           fi
           
           # Post comment

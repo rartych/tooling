@@ -124,7 +124,6 @@ jobs:
           ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
           DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
           CHANGED_FILES_COUNT=$(echo "$PR_DATA" | jq -r '.changed_files')
-          HEAD_SHA=$(echo "$PR_DATA" | jq -r '.head.sha')
           
           # Get list of changed files
           FILES_DATA=$(curl -s \
@@ -175,7 +174,6 @@ jobs:
           echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
           echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
           echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
-          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
           
           echo "files_list<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES_LIST" >> $GITHUB_OUTPUT
@@ -184,139 +182,6 @@ jobs:
           echo "ext_stats<<EOF" >> $GITHUB_OUTPUT
           echo "$EXT_STATS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          
-          echo "files_data<<EOF" >> $GITHUB_OUTPUT
-          echo "$FILES_DATA" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Download changed files
-        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == '' && steps.pr_details.outputs.error == ''
-        id: download_files
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_OWNER="${{ steps.extract_pr.outputs.pr_owner }}"
-          PR_REPO="${{ steps.extract_pr.outputs.pr_repo }}"
-          HEAD_SHA="${{ steps.pr_details.outputs.head_sha }}"
-          
-          # Create download directory
-          DOWNLOAD_DIR="downloaded_files"
-          mkdir -p "$DOWNLOAD_DIR"
-          
-          # Initialize counters
-          DOWNLOADED_COUNT=0
-          FAILED_COUNT=0
-          TOTAL_SIZE=0
-          DOWNLOAD_SUMMARY=""
-          
-          echo "📥 Starting file downloads..."
-          
-          while IFS= read -r file; do
-            filename=$(echo "$file" | jq -r '.filename')
-            status=$(echo "$file" | jq -r '.status')
-            
-            # Skip removed files (they don't exist in the new version)
-            if [ "$status" = "removed" ]; then
-              echo "⏭️  Skipping removed file: $filename"
-              DOWNLOAD_SUMMARY+="⏭️ \`$filename\` (removed - skipped)
-"
-              continue
-            fi
-            
-            echo "📥 Downloading: $filename"
-            
-            # Create directory structure
-            dir_path=$(dirname "$filename")
-            if [ "$dir_path" != "." ]; then
-              mkdir -p "$DOWNLOAD_DIR/$dir_path"
-            fi
-            
-            # Download file from the PR head commit
-            if curl -s -f \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github.v3.raw" \
-              -o "$DOWNLOAD_DIR/$filename" \
-              "https://api.github.com/repos/$PR_OWNER/$PR_REPO/contents/$filename?ref=$HEAD_SHA"; then
-              
-              # Get file size
-              file_size=$(stat -f%z "$DOWNLOAD_DIR/$filename" 2>/dev/null || stat -c%s "$DOWNLOAD_DIR/$filename" 2>/dev/null || echo "0")
-              TOTAL_SIZE=$((TOTAL_SIZE + file_size))
-              DOWNLOADED_COUNT=$((DOWNLOADED_COUNT + 1))
-              
-              # Format file size
-              if [ $file_size -gt 1048576 ]; then
-                size_display="$(($file_size / 1048576))MB"
-              elif [ $file_size -gt 1024 ]; then
-                size_display="$(($file_size / 1024))KB"
-              else
-                size_display="${file_size}B"
-              fi
-              
-              echo "✅ Downloaded: $filename ($size_display)"
-              DOWNLOAD_SUMMARY+="✅ \`$filename\` ($size_display)
-"
-            else
-              echo "❌ Failed to download: $filename"
-              FAILED_COUNT=$((FAILED_COUNT + 1))
-              DOWNLOAD_SUMMARY+="❌ \`$filename\` (download failed)
-"
-            fi
-          done < <(echo '${{ steps.pr_details.outputs.files_data }}' | jq -c '.[]')
-          
-          # Format total size
-          if [ $TOTAL_SIZE -gt 1048576 ]; then
-            total_size_display="$(($TOTAL_SIZE / 1048576))MB"
-          elif [ $TOTAL_SIZE -gt 1024 ]; then
-            total_size_display="$(($TOTAL_SIZE / 1024))KB"
-          else
-            total_size_display="${TOTAL_SIZE}B"
-          fi
-          
-          echo "📊 Download Summary:"
-          echo "   Downloaded: $DOWNLOADED_COUNT files"
-          echo "   Failed: $FAILED_COUNT files"
-          echo "   Total size: $total_size_display"
-          
-          # Save outputs
-          echo "downloaded_count=$DOWNLOADED_COUNT" >> $GITHUB_OUTPUT
-          echo "failed_count=$FAILED_COUNT" >> $GITHUB_OUTPUT
-          echo "total_size=$total_size_display" >> $GITHUB_OUTPUT
-          echo "download_dir=$DOWNLOAD_DIR" >> $GITHUB_OUTPUT
-          
-          echo "download_summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$DOWNLOAD_SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create file archive
-        if: steps.download_files.outputs.downloaded_count > 0
-        id: create_archive
-        run: |
-          DOWNLOAD_DIR="${{ steps.download_files.outputs.download_dir }}"
-          PR_NUMBER="${{ steps.extract_pr.outputs.pr_number }}"
-          ARCHIVE_NAME="pr-${PR_NUMBER}-files.tar.gz"
-          
-          echo "📦 Creating archive: $ARCHIVE_NAME"
-          
-          # Create compressed archive
-          tar -czf "$ARCHIVE_NAME" -C "$DOWNLOAD_DIR" .
-          
-          # Get archive size
-          archive_size=$(stat -f%z "$ARCHIVE_NAME" 2>/dev/null || stat -c%s "$ARCHIVE_NAME" 2>/dev/null || echo "0")
-          
-          # Format archive size
-          if [ $archive_size -gt 1048576 ]; then
-            archive_size_display="$(($archive_size / 1048576))MB"
-          elif [ $archive_size -gt 1024 ]; then
-            archive_size_display="$(($archive_size / 1024))KB"
-          else
-            archive_size_display="${archive_size}B"
-          fi
-          
-          echo "✅ Archive created: $ARCHIVE_NAME ($archive_size_display)"
-          
-          # Save outputs
-          echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
-          echo "archive_size=$archive_size_display" >> $GITHUB_OUTPUT
 
       - name: Post results to issue
         if: steps.extract_pr.outputs.skip != 'true'

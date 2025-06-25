@@ -219,7 +219,7 @@ jobs:
               - **Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\` → \`${{ steps.pr_details.outputs.pr_base }}\`
               - **Created**: $CREATED_DATE
               - **Updated**: $UPDATED_DATE
-              - **Link**: [$PR_URL]($PR_URL)
+              - **Link**: $PR_URL
               ### 📊 Changes Summary
               - **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
               - **Lines added**: +${{ steps.pr_details.outputs.additions }}

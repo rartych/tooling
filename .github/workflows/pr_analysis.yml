@@ -1,4 +1,4 @@
-o # .github/workflows/pr-files-analyzer.yml
+# .github/workflows/pr-files-analyzer.yml
 name: PR Analyzer
 
 on:

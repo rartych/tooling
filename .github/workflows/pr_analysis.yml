@@ -171,9 +171,9 @@ jobs:
           echo "pr_base=$PR_BASE" >> $GITHUB_OUTPUT
           echo "pr_created=$PR_CREATED" >> $GITHUB_OUTPUT
           echo "pr_updated=$PR_UPDATED" >> $GITHUB_OUTPUT
-          echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
-          echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
-          echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
+          # echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
+          # echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
+          # echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
           echo "files_list=$FILES_LIST" >> $GITHUB_OUTPUT
 
       - name: Post results to issue

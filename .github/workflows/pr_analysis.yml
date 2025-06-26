@@ -1,0 +1,223 @@
+# .github/workflows/pr-files-analyzer.yml
+name: PR Analyzer
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_url:
+        description: 'Pull Request URL (e.g., https://github.com/owner/repo/pull/123)'
+        required: true
+        type: string
+      issue_number:
+        description: 'Issue number to update'
+        required: true
+        type: string
+
+permissions:
+  issues: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  analyze-pr-files:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract PR info from input or comment
+        id: extract_pr
+        run: |
+          # Function to extract PR info from URL
+          extract_pr_info() {
+            local url="$1"
+            # Extract owner, repo, and PR number from GitHub PR URL
+            if [[ $url =~ https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
+              echo "owner=${BASH_REMATCH[1]}"
+              echo "repo=${BASH_REMATCH[2]}"
+              echo "pr_number=${BASH_REMATCH[3]}"
+              echo "valid=true"
+            else
+              echo "valid=false"
+            fi
+          }
+          
+          # Determine source of PR URL and issue number
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual trigger
+            PR_URL="${{ github.event.inputs.pr_url }}"
+            ISSUE_NUMBER="${{ github.event.inputs.issue_number }}"
+          elif [ "${{ github.event_name }}" == "issue_comment" ]; then
+            # Comment trigger - look for PR URL in comment
+            COMMENT_BODY="${{ github.event.comment.body }}"
+            PR_URL=$(echo "$COMMENT_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+            
+            # Only proceed if comment contains "/analyze-pr" command
+            if [[ ! "$COMMENT_BODY" =~ /analyze-pr ]]; then
+              echo "Comment doesn't contain /analyze-pr command, skipping..."
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          else
+            # Issue opened/labeled - look for PR URL in issue body
+            ISSUE_BODY="${{ github.event.issue.body }}"
+            PR_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          fi
+          
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+          
+          if [ -z "$PR_URL" ]; then
+            echo "No PR URL found, skipping..."
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          
+          # Extract PR information
+          eval $(extract_pr_info "$PR_URL")
+          
+          if [ "$valid" != "true" ]; then
+            echo "Invalid PR URL format: $PR_URL"
+            echo "error=Invalid PR URL format" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "pr_owner=$owner" >> $GITHUB_OUTPUT
+          echo "pr_repo=$repo" >> $GITHUB_OUTPUT
+          echo "pr_number=$pr_number" >> $GITHUB_OUTPUT
+          echo "Skip: false, PR: $owner/$repo#$pr_number, Issue: $ISSUE_NUMBER"
+
+      - name: Get PR details and files
+        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == ''
+        id: pr_details
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_OWNER="${{ steps.extract_pr.outputs.pr_owner }}"
+          PR_REPO="${{ steps.extract_pr.outputs.pr_repo }}"
+          PR_NUMBER="${{ steps.extract_pr.outputs.pr_number }}"
+          
+          # Get PR details
+          PR_DATA=$(curl -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER")
+          
+          # Check if PR exists
+          if echo "$PR_DATA" | jq -e '.message == "Not Found"' > /dev/null; then
+            echo "error=PR not found or not accessible" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Extract PR info
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
+          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
+          PR_CREATED=$(echo "$PR_DATA" | jq -r '.created_at')
+          PR_UPDATED=$(echo "$PR_DATA" | jq -r '.updated_at')
+          ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
+          DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
+          CHANGED_FILES_COUNT=$(echo "$PR_DATA" | jq -r '.changed_files')
+          
+          # Get list of changed files
+          FILES_DATA=$(curl -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER/files")
+          
+          # Process files data
+          FILES_LIST=""
+          FILE_STATS=""
+          
+          while IFS= read -r file; do
+            filename=$(echo "$file" | jq -r '.filename')
+            status=$(echo "$file" | jq -r '.status')
+            additions=$(echo "$file" | jq -r '.additions')
+            deletions=$(echo "$file" | jq -r '.deletions')
+            changes=$(echo "$file" | jq -r '.changes')
+            
+            # Determine emoji based on file status
+            case $status in
+              "added") emoji="🆕" ;;
+              "removed") emoji="🗑️" ;;
+              "modified") emoji="📝" ;;
+              "renamed") emoji="🔄" ;;
+              *) emoji="📄" ;;
+            esac
+            
+            FILES_LIST+="$emoji \`$filename\` ($status: +$additions/-$deletions)
+
+            # Collect file extension stats
+            ext="${filename##*.}"
+            if [ "$ext" != "$filename" ]; then
+              FILE_STATS+="$ext "
+            fi
+          done < <(echo "$FILES_DATA" | jq -c '.[]')
+          
+          # Count file extensions
+          EXT_STATS=$(echo "$FILE_STATS" | tr ' ' '\n' | sort | uniq -c | sort -nr | head -5)
+          
+          # Save outputs
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "pr_state=$PR_STATE" >> $GITHUB_OUTPUT
+          echo "pr_author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+          echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          echo "pr_base=$PR_BASE" >> $GITHUB_OUTPUT
+          echo "pr_created=$PR_CREATED" >> $GITHUB_OUTPUT
+          echo "pr_updated=$PR_UPDATED" >> $GITHUB_OUTPUT
+          echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
+          echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
+          echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
+          echo "files_list=$FILES_LIST" >> $GITHUB_OUTPUT
+
+      - name: Post results to issue
+        if: steps.extract_pr.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUMBER="${{ steps.extract_pr.outputs.issue_number }}"
+          
+              COMMENT_BODY: |
+              ## 📋 PR Analysis Results
+              ### 🔗 Pull Request Details
+              - **Title**: ${{ steps.pr_details.outputs.pr_title }}
+              - **Status**: \`${{ steps.pr_details.outputs.pr_state }}\` 
+              - **Author**: @${{ steps.pr_details.outputs.pr_author }}
+              - **Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\` → \`${{ steps.pr_details.outputs.pr_base }}\`
+              - **Created**: $CREATED_DATE
+              - **Updated**: $UPDATED_DATE
+              - **Link**: $PR_URL
+              ### 📊 Changes Summary
+              - **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
+              - **Lines added**: +${{ steps.pr_details.outputs.additions }}
+              - **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
+              ### Files list
+              ${{ steps.pr_details.outputs.files_list }}
+          fi
+          
+          # Post comment
+          curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
+            -d "{\"body\":$(echo "$COMMENT_BODY" | jq -Rs .)}"
+          
+          echo "Comment posted to issue #$ISSUE_NUMBER"
+
+      - name: Add analysis label
+        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == '' && steps.pr_details.outputs.error == ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Add label to indicate PR analysis was completed
+          curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ steps.extract_pr.outputs.issue_number }}/labels" \
+            -d '["pr-analyzed"]'

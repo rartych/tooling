@@ -1,4 +1,4 @@
-# .github/workflows/pr-files-analyzer.yml
+o # .github/workflows/pr-files-analyzer.yml
 name: PR Analyzer
 
 on:
@@ -159,22 +159,23 @@ jobs:
               FILE_STATS+="$ext "
             fi
           done < <(echo "$FILES_DATA" | jq -c '.[]')
+          echo #FILES_LIST
           
           # Count file extensions
           EXT_STATS=$(echo "$FILE_STATS" | tr ' ' '\n' | sort | uniq -c | sort -nr | head -5)
           
           # Save outputs
-          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
-          echo "pr_state=$PR_STATE" >> $GITHUB_OUTPUT
-          echo "pr_author=$PR_AUTHOR" >> $GITHUB_OUTPUT
-          echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
-          echo "pr_base=$PR_BASE" >> $GITHUB_OUTPUT
-          echo "pr_created=$PR_CREATED" >> $GITHUB_OUTPUT
-          echo "pr_updated=$PR_UPDATED" >> $GITHUB_OUTPUT
+          # echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          # echo "pr_state=$PR_STATE" >> $GITHUB_OUTPUT
+          # echo "pr_author=$PR_AUTHOR" >> $GITHUB_OUTPUT
+          # echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
+          # echo "pr_base=$PR_BASE" >> $GITHUB_OUTPUT
+          # echo "pr_created=$PR_CREATED" >> $GITHUB_OUTPUT
+          # echo "pr_updated=$PR_UPDATED" >> $GITHUB_OUTPUT
           # echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
           # echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
           # echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
-          echo "files_list=$FILES_LIST" >> $GITHUB_OUTPUT
+          # echo "files_list=$FILES_LIST" >> $GITHUB_OUTPUT
 
       - name: Post results to issue
         if: steps.extract_pr.outputs.skip != 'true'

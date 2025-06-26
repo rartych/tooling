@@ -114,3 +114,56 @@ jobs:
           fi
 
           echo $PR_DATA
+
+          # Extract PR info
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
+          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
+          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
+          PR_CREATED=$(echo "$PR_DATA" | jq -r '.created_at')
+          PR_UPDATED=$(echo "$PR_DATA" | jq -r '.updated_at')
+          ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
+          DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
+          CHANGED_FILES_COUNT=$(echo "$PR_DATA" | jq -r '.changed_files')
+          
+          # Get list of changed files
+          FILES_DATA=$(curl -s \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER/files")
+          echo $FILES_DATA
+
+                    
+          # Process files data
+          FILES_LIST=""
+          FILE_STATS=""
+          
+          while IFS= read -r file; do
+            filename=$(echo "$file" | jq -r '.filename')
+            status=$(echo "$file" | jq -r '.status')
+            additions=$(echo "$file" | jq -r '.additions')
+            deletions=$(echo "$file" | jq -r '.deletions')
+            changes=$(echo "$file" | jq -r '.changes')
+            
+            # Determine emoji based on file status
+            case $status in
+              "added") emoji="🆕" ;;
+              "removed") emoji="🗑️" ;;
+              "modified") emoji="📝" ;;
+              "renamed") emoji="🔄" ;;
+              *) emoji="📄" ;;
+            esac
+            
+            FILES_LIST+="$emoji \`$filename\` ($status: +$additions/-$deletions)
+
+            # Collect file extension stats
+            ext="${filename##*.}"
+            if [ "$ext" != "$filename" ]; then
+              FILE_STATS+="$ext "
+            fi
+          done < <(echo "$FILES_DATA" | jq -c '.[]')
+
+          
+          echo $FILES_LIST
+          echo $FILES_STAT

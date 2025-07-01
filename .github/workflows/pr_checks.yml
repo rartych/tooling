@@ -69,11 +69,12 @@ jobs:
             ISSUE_NUMBER="${{ github.event.issue.number }}"
             
             # Only proceed if comment contains "/analyze-pr" command
-            if [[ ! "$COMMENT_BODY" =~ /analyze-pr ]]; then
+            if [[ "$COMMENT_BODY" != *"/analyze-pr"* ]]; then
               echo "Comment doesn't contain /analyze-pr command, skipping..."
               echo "skip=true" >> $GITHUB_OUTPUT
               exit 0
             fi
+            
           else
             # Issue opened/labeled - look for PR URL in issue body
             ISSUE_BODY="${{ github.event.issue.body }}"

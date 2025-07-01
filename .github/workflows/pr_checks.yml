@@ -65,6 +65,7 @@ jobs:
           elif [ "${{ github.event_name }}" == "issue_comment" ]; then
             # Comment trigger - look for PR URL in comment
             COMMENT_BODY="${{ github.event.comment.body }}"
+            echo "$COMMENT_BODY"
             PR_URL=$(echo "$COMMENT_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
             ISSUE_NUMBER="${{ github.event.issue.number }}"
             

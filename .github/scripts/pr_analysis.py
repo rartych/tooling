@@ -159,6 +159,8 @@ def main():
         pr_data, files_data = get_pr_files(token, owner, repo, pr_number)
                   
         # Create comment
+        print ("🔍 **Release PR Analysis Report**")
+        print (f"📅 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         
         for f in files_data:
             # print (f['filename'], f['raw_url'] )             

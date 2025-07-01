@@ -93,9 +93,12 @@ jobs:
 
       - name: Run PR analysis
         id: python-analysis
+        # Run the Python script and capture its output
+        env:
+          PR_URL: ${{ steps.extract_pr.outputs.PR_URL }}
         run: |
-          # Run the Python script and capture its output
           output=$(python3 .github/scripts/pr_analysis.py)
+          
           echo "$output"
 
           # Save multiline output to GitHub Actions output

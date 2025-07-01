@@ -96,6 +96,7 @@ jobs:
         # Run the Python script and capture its output
         env:
           PR_URL: ${{ steps.extract_pr.outputs.PR_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           output=$(python3 .github/scripts/pr_analysis.py)
           

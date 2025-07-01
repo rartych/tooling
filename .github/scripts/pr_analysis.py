@@ -150,7 +150,6 @@ def main():
     issue_number= os.environ.get('ISSUE_NUMBER')
     include_diff = os.environ.get('INCLUDE_DIFF', 'true').lower() == 'true'
     try:
-        print(f"Analyzing PR #{pr_url}")
         # Parse PR URL
         owner, repo, pr_number = parse_pr_url(pr_url)
         # print(f"Analyzing PR #{pr_number} from {owner}/{repo}")
@@ -161,7 +160,7 @@ def main():
         # Create comment
         print ("🔍 **Release PR Analysis Report**")
         print (f"📅 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        
+        print(f"Analyzing PR #{pr_url}")
         for f in files_data:
             # print (f['filename'], f['raw_url'] )             
             if f['filename']=='CHANGELOG.md':

@@ -76,7 +76,8 @@ jobs:
 
           # Extract and output PR info (owner, repo, pr_number)
           extract_pr_info "$PR_URL"
-
+          # Source variables written to $GITHUB_OUTPUT (or export in function and use them here)
+          eval "$(grep -E '^(owner|repo|pr_number|valid)=' $GITHUB_OUTPUT)"
     
            
           if [ "$valid" != "true" ]; then

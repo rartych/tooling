@@ -96,6 +96,7 @@ jobs:
         run: |
           # Run the Python script and capture its output
           output=$(python3 .github/scripts/pr_analysis.py)
+          echo "$output"
 
           # Save multiline output to GitHub Actions output
           # Using delimiter to handle multiline strings properly

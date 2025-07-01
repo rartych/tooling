@@ -136,7 +136,7 @@ def analyse_OAS (url):
     analysis_result="**API Title:** "+ OAS_info.get('title')
     analysis_result=analysis_result +"\n**API version:** "+ OAS_info.get('version')
     analysis_result=analysis_result +"\n**Commonalities version:** "+ str(OAS_info.get('x-camara-commonalities'))
-    analysis_result=analysis_result +"\n**External docs:** " + OAS.get('externalDocs', {})
+    analysis_result=analysis_result +"\n**External docs:** " + str(OAS.get('externalDocs', {}))
     
     check_mark_unicode = "\u2705"
     cross_mark_unicode = "u\274C"

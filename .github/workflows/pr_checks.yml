@@ -25,7 +25,17 @@ permissions:
 jobs:
   analyze-pr-files:
     runs-on: ubuntu-latest
-    steps:
+    steps:   
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests PyGithub markdown bs4 pyyaml
+
       - name: Extract PR info from input or comment
         id: extract_pr
         run: |
@@ -77,164 +87,41 @@ jobs:
           
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
           
-          # Extract PR information
-          eval $(extract_pr_info "$PR_URL")
-          
-          if [ "$valid" != "true" ]; then
-            echo "Invalid PR URL format: $PR_URL"
-            echo "error=Invalid PR URL format" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          echo "pr_owner=$owner" >> $GITHUB_OUTPUT
-          echo "pr_repo=$repo" >> $GITHUB_OUTPUT
-          echo "pr_number=$pr_number" >> $GITHUB_OUTPUT
-          echo "Skip: false, PR: $owner/$repo#$pr_number, Issue: $ISSUE_NUMBER"
 
-      - name: Get PR details and files
-        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == ''
-        id: pr_details
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run PR analysis
+        id: python-analysis
         run: |
-          PR_OWNER="${{ steps.extract_pr.outputs.pr_owner }}"
-          PR_REPO="${{ steps.extract_pr.outputs.pr_repo }}"
-          PR_NUMBER="${{ steps.extract_pr.outputs.pr_number }}"
-          
-          # Get PR details
-          PR_DATA=$(curl -s \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER")
-          
-          # Check if PR exists
-          if echo "$PR_DATA" | jq -e '.message == "Not Found"' > /dev/null; then
-            echo "error=PR not found or not accessible" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Extract PR info
-          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
-          PR_STATE=$(echo "$PR_DATA" | jq -r '.state')
-          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login')
-          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
-          PR_BASE=$(echo "$PR_DATA" | jq -r '.base.ref')
-          PR_CREATED=$(echo "$PR_DATA" | jq -r '.created_at')
-          PR_UPDATED=$(echo "$PR_DATA" | jq -r '.updated_at')
-          ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
-          DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
-          CHANGED_FILES_COUNT=$(echo "$PR_DATA" | jq -r '.changed_files')
-          
-          # Get list of changed files
-          FILES_DATA=$(curl -s \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER/files")
-          
-          # Process files data
-          FILES_LIST=""
-          FILE_STATS=""
-          
-          while IFS= read -r file; do
-            filename=$(echo "$file" | jq -r '.filename')
-            status=$(echo "$file" | jq -r '.status')
-            additions=$(echo "$file" | jq -r '.additions')
-            deletions=$(echo "$file" | jq -r '.deletions')
-            changes=$(echo "$file" | jq -r '.changes')
-            
-            # Determine emoji based on file status
-            case $status in
-              "added") emoji="🆕" ;;
-              "removed") emoji="🗑️" ;;
-              "modified") emoji="📝" ;;
-              "renamed") emoji="🔄" ;;
-              *) emoji="📄" ;;
-            esac
-            
-            FILES_LIST+="$emoji \`$filename\` ($status: +$additions/-$deletions)
+          # Run the Python script and capture its output
+          output=$(python3 .github/scripts/pr_analysis.py)
 
-            # Collect file extension stats
-            ext="${filename##*.}"
-            if [ "$ext" != "$filename" ]; then
-              FILE_STATS+="$ext "
-            fi
-          done < <(echo "$FILES_DATA" | jq -c '.[]')
+          # Save multiline output to GitHub Actions output
+          # Using delimiter to handle multiline strings properly
+          delimiter="EOF_DELIMITER_$(date +%s)"
+          {
+            echo "analysis_result<<$delimiter"
+            echo "$output"
+            echo "$delimiter"
+          } >> $GITHUB_OUTPUT
           
-          # Count file extensions
-          EXT_STATS=$(echo "$FILE_STATS" | tr ' ' '\n' | sort | uniq -c | sort -nr | head -5)
-          
-          # Save outputs
-          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
-          echo "pr_state=$PR_STATE" >> $GITHUB_OUTPUT
-          echo "pr_author=$PR_AUTHOR" >> $GITHUB_OUTPUT
-          echo "pr_branch=$PR_BRANCH" >> $GITHUB_OUTPUT
-          echo "pr_base=$PR_BASE" >> $GITHUB_OUTPUT
-          echo "pr_created=$PR_CREATED" >> $GITHUB_OUTPUT
-          echo "pr_updated=$PR_UPDATED" >> $GITHUB_OUTPUT
-          echo "additions=$ADDITIONS" >> $GITHUB_OUTPUT
-          echo "deletions=$DELETIONS" >> $GITHUB_OUTPUT
-          echo "changed_files_count=$CHANGED_FILES_COUNT" >> $GITHUB_OUTPUT
+          echo "Analysis completed successfully!"
 
-      - name: Post results to issue
-        if: steps.extract_pr.outputs.skip != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add comment to issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumber = ${{ steps.extract_pr.outputs.issue_number }};
+            const analysisResult = `${{ steps.python-analysis.outputs.analysis_result }}`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: analysisResult
+            });
+            
+            console.log(`Comment added to issue #${issueNumber}`);
+      
+      - name: Summary
         run: |
-          ISSUE_NUMBER="${{ steps.extract_pr.outputs.issue_number }}"
-          
-          # Check for errors
-          if [ -n "${{ steps.extract_pr.outputs.error }}" ]; then
-            COMMENT_BODY: |
-              ❌ **Error analyzing PR**
-              ${{ steps.extract_pr.outputs.error }}
-              Please provide a valid GitHub PR URL in the format: \`https://github.com/owner/repo/pull/123\`
-              
-          elif [ -n "${{ steps.pr_details.outputs.error }}" ]; then
-            COMMENT_BODY: |
-              ❌ **Error accessing PR**
-              ${{ steps.pr_details.outputs.error }}
-              The PR might be in a private repository or the URL might be incorrect.
-          else
-          # Format the success response
-            PR_URL="${{ steps.extract_pr.outputs.pr_url }}"            
-         
-          # Format creation/update dates
-            CREATED_DATE=$(date -d "${{ steps.pr_details.outputs.pr_created }}" +'%Y-%m-%d %H:%M UTC' 2>/dev/null || echo "${{ steps.pr_details.outputs.pr_created }}")
-            UPDATED_DATE=$(date -d "${{ steps.pr_details.outputs.pr_updated }}" +'%Y-%m-%d %H:%M UTC' 2>/dev/null || echo "${{ steps.pr_details.outputs.pr_updated }}")
-            
-            COMMENT_BODY: |
-              ## 📋 PR Analysis Results
-              ### 🔗 Pull Request Details
-              - **Title**: ${{ steps.pr_details.outputs.pr_title }}
-              - **Status**: \`${{ steps.pr_details.outputs.pr_state }}\` 
-              - **Author**: @${{ steps.pr_details.outputs.pr_author }}
-              - **Branch**: \`${{ steps.pr_details.outputs.pr_branch }}\` → \`${{ steps.pr_details.outputs.pr_base }}\`
-              - **Created**: $CREATED_DATE
-              - **Updated**: $UPDATED_DATE
-              - **Link**: $PR_URL
-              ### 📊 Changes Summary
-              - **Files changed**: ${{ steps.pr_details.outputs.changed_files_count }}
-              - **Lines added**: +${{ steps.pr_details.outputs.additions }}
-              - **Lines deleted**: -${{ steps.pr_details.outputs.deletions }}
-          fi
-          
-          # Post comment
-          curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments" \
-            -d "{\"body\":$(echo "$COMMENT_BODY" | jq -Rs .)}"
-          
-          echo "Comment posted to issue #$ISSUE_NUMBER"
-
-      - name: Add analysis label
-        if: steps.extract_pr.outputs.skip != 'true' && steps.extract_pr.outputs.error == '' && steps.pr_details.outputs.error == ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Add label to indicate PR analysis was completed
-          curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/issues/${{ steps.extract_pr.outputs.issue_number }}/labels" \
-            -d '["pr-analyzed"]'
+          echo "✅ Python analysis completed and comment added to issue #${{ steps.extract_pr.outputs.issue_number }}"

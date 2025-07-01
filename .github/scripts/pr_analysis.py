@@ -9,10 +9,7 @@ from bs4 import BeautifulSoup
 import re
 import yaml
 
-token = os.environ.get('GITHUB_TOKEN')
-pr_url = os.environ.get('PR_URL')
-issue_numbera= os.environ.get('ISSUE_NUMBER')
-include_diff = os.environ.get('INCLUDE_DIFF', 'true').lower() == 'true'
+
 
 def parse_pr_url(pr_url):
     """Parse PR URL to extract owner, repo, and PR number"""
@@ -80,7 +77,12 @@ def analyse_OAS (url):
 
 def main():
     """Main function to run the analysis."""
+    token = os.environ.get('GITHUB_TOKEN')
+    pr_url = os.environ.get('PR_URL')
+    issue_number= os.environ.get('ISSUE_NUMBER')
+    include_diff = os.environ.get('INCLUDE_DIFF', 'true').lower() == 'true'
     try:
+        print(f"Analyzing PR #{pr_url}")
         # Parse PR URL
         owner, repo, pr_number = parse_pr_url(pr_url)
         print(f"Analyzing PR #{pr_number} from {owner}/{repo}")

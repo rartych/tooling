@@ -41,6 +41,7 @@ jobs:
 
       - name: Extract PR info from input or comment
         id: extract_pr
+        shell: bash
         run: |
           # Function to extract PR info from URL
           extract_pr_info() {

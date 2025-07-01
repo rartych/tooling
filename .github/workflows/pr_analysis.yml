@@ -28,58 +28,57 @@ jobs:
     steps:
       - name: Extract PR info from input or comment
         id: extract_pr
+        shell: bash
         run: |
+          set -euo pipefail
+
           # Function to extract PR info from URL
           extract_pr_info() {
             local url="$1"
-            # Extract owner, repo, and PR number from GitHub PR URL
             if [[ $url =~ https://github\.com/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
-              echo "owner=${BASH_REMATCH[1]}"
-              echo "repo=${BASH_REMATCH[2]}"
-              echo "pr_number=${BASH_REMATCH[3]}"
-              echo "valid=true"
+              echo "owner=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+              echo "repo=${BASH_REMATCH[2]}" >> $GITHUB_OUTPUT
+              echo "pr_number=${BASH_REMATCH[3]}" >> $GITHUB_OUTPUT
+              echo "valid=true" >> $GITHUB_OUTPUT
             else
-              echo "valid=false"
+              echo "valid=false" >> $GITHUB_OUTPUT
             fi
           }
-          
+
           # Determine source of PR URL and issue number
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            # Manual trigger
             PR_URL="${{ github.event.inputs.pr_url }}"
             ISSUE_NUMBER="${{ github.event.inputs.issue_number }}"
           elif [ "${{ github.event_name }}" == "issue_comment" ]; then
-            # Comment trigger - look for PR URL in comment
             COMMENT_BODY="${{ github.event.comment.body }}"
             PR_URL=$(echo "$COMMENT_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
             ISSUE_NUMBER="${{ github.event.issue.number }}"
-            
-            # Only proceed if comment contains "/analyze-pr" command
-            if [[ ! "$COMMENT_BODY" =~ /analyze-pr ]]; then
+            if [[ "$COMMENT_BODY" != *"/analyze-pr"* ]]; then
               echo "Comment doesn't contain /analyze-pr command, skipping..."
               echo "skip=true" >> $GITHUB_OUTPUT
               exit 0
             fi
           else
-            # Issue opened/labeled - look for PR URL in issue body
             ISSUE_BODY="${{ github.event.issue.body }}"
             PR_URL=$(echo "$ISSUE_BODY" | grep -oP 'https://github\.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
             ISSUE_NUMBER="${{ github.event.issue.number }}"
           fi
-          
+
           echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
-          
+
           if [ -z "$PR_URL" ]; then
             echo "No PR URL found, skipping..."
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          
-          # Extract PR information
-          eval $(extract_pr_info "$PR_URL")
-          
+
+          # Extract and output PR info (owner, repo, pr_number)
+          extract_pr_info "$PR_URL"
+
+    
+           
           if [ "$valid" != "true" ]; then
             echo "Invalid PR URL format: $PR_URL"
             echo "error=Invalid PR URL format" >> $GITHUB_OUTPUT
@@ -134,36 +133,4 @@ jobs:
             "https://api.github.com/repos/$PR_OWNER/$PR_REPO/pulls/$PR_NUMBER/files")
           echo $FILES_DATA
 
-                    
-          # Process files data
-          FILES_LIST=""
-          FILE_STATS=""
-          
-          while IFS= read -r file; do
-            filename=$(echo "$file" | jq -r '.filename')
-            status=$(echo "$file" | jq -r '.status')
-            additions=$(echo "$file" | jq -r '.additions')
-            deletions=$(echo "$file" | jq -r '.deletions')
-            changes=$(echo "$file" | jq -r '.changes')
-            
-            # Determine emoji based on file status
-            case $status in
-              "added") emoji="🆕" ;;
-              "removed") emoji="🗑️" ;;
-              "modified") emoji="📝" ;;
-              "renamed") emoji="🔄" ;;
-              *) emoji="📄" ;;
-            esac
-            
-            FILES_LIST+="$emoji \`$filename\` ($status: +$additions/-$deletions)
-
-            # Collect file extension stats
-            ext="${filename##*.}"
-            if [ "$ext" != "$filename" ]; then
-              FILE_STATS+="$ext "
-            fi
-          done < <(echo "$FILES_DATA" | jq -c '.[]')
-
-          
-          echo $FILES_LIST
-          echo $FILES_STAT
+              

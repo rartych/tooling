@@ -35,7 +35,7 @@ jobs:
         id: python-analysis
         run: |
           # Run the Python script and capture its output
-          output=$(python ./scripts/analyze.py)
+          output=$(python3 .github/scripts/analyze.py)
 
           # Save multiline output to GitHub Actions output
           # Using delimiter to handle multiline strings properly

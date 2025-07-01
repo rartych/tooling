@@ -133,11 +133,11 @@ def analyse_OAS (url):
     OAS = yaml.safe_load(requests.get(url, verify=False).text)
     analysis_result=""
     OAS_info=OAS.get('info', {})
-    analysis_result="API Title: "+ OAS_info.get('title')
-    analysis_result=analysis_result +"\nAPI version: "+ OAS_info.get('version')
-    analysis_result=analysis_result +"\nCommonalities version: "+ str(OAS_info.get('x-camara-commonalities'))
-    external_docs=OAS.get('externalDocs', {})
-    print (external_docs)
+    analysis_result="**API Title:** "+ OAS_info.get('title')
+    analysis_result=analysis_result +"\n**API version:** "+ OAS_info.get('version')
+    analysis_result=analysis_result +"\n**Commonalities version:** "+ str(OAS_info.get('x-camara-commonalities'))
+    analysis_result=analysis_result +"\n**External docs:** " + OAS.get('externalDocs', {})
+    
     check_mark_unicode = "\u2705"
     cross_mark_unicode = "u\274C"
 
@@ -153,7 +153,7 @@ def main():
         print(f"Analyzing PR #{pr_url}")
         # Parse PR URL
         owner, repo, pr_number = parse_pr_url(pr_url)
-        print(f"Analyzing PR #{pr_number} from {owner}/{repo}")
+        # print(f"Analyzing PR #{pr_number} from {owner}/{repo}")
                   
         # Get PR files
         pr_data, files_data = get_pr_files(token, owner, repo, pr_number)
@@ -161,7 +161,7 @@ def main():
         # Create comment
         
         for f in files_data:
-            print (f['filename'], f['raw_url'] )             
+            # print (f['filename'], f['raw_url'] )             
             if f['filename']=='CHANGELOG.md':
                 print ('### Changelog checks')
                 changelog_results= analyse_changelog(f['raw_url'])

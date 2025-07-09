@@ -279,6 +279,7 @@ class CAMARAAPIValidator:
     def _get_manual_checks_for_type(self, api_type: APIType) -> List[str]:
         """Get manual checks needed based on API type"""
         common_checks = [
+            "Info.description for device or phone number (if applicable)",
             "Business logic appropriateness review",
             "Documentation quality assessment", 
             "API design patterns validation",
@@ -352,7 +353,9 @@ class CAMARAAPIValidator:
     def _validate_info_object(self, api_spec: dict, result: ValidationResult):
         """Validate the info object with comprehensive checks"""
         result.checks_performed.append("Info object validation")
-        
+        result.checks_performed.append("Authorization template validation") 
+        result.checks_performed.append("Error responses template validation")
+                
         info = api_spec.get('info', {})
         if not info:
             result.issues.append(ValidationIssue(
@@ -402,7 +405,12 @@ class CAMARAAPIValidator:
                 "Incorrect license URL",
                 "info.license.url"
             ))
-        
+
+        # Mandatory template validations
+        description = info.get('description', '')
+        self._validate_authorization_template(description, result)
+        self._validate_error_responses_template(description, result)
+
         # Commonalities version
         commonalities = info.get('x-camara-commonalities')
         if str(commonalities) != self.expected_commonalities_version:
@@ -416,9 +424,113 @@ class CAMARAAPIValidator:
         if 'termsOfService' in info:
             result.issues.append(ValidationIssue(
                 Severity.MEDIUM, "Info Object",
-                "`termsOfService` field is forbidden",
+                "`termsOfService` should not be in the API definition",
                 "info.termsOfService",
                 "Remove `termsOfService` field"
+            ))
+
+    def _normalize_text_for_template_check(self, text: str) -> str:
+        """Normalize text for template comparison (remove extra whitespace, make lowercase)"""
+        # Remove extra whitespace, normalize line breaks, make lowercase
+        normalized = re.sub(r'\s+', ' ', text.strip().lower())
+        # Remove common markdown formatting that might vary
+        normalized = re.sub(r'[*_`]', '', normalized)
+        return normalized
+
+    def _validate_authorization_template(self, description: str, result: ValidationResult):
+        """Validate mandatory authorization template in info.description"""
+        if not description:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Authorization Template",
+                "Missing info.description - required for authorization template",
+                "info.description"
+            ))
+            return
+        
+        # Required authorization template components
+        required_components = [
+            "# Authorization and authentication",
+            "Camara Security and Interoperability Profile",
+            "Identity and Consent Management",
+            "github.com/camaraproject/IdentityAndConsentManagement",
+            "authorization flows to be used will be agreed upon during the onboarding process",
+            "three-legged access tokens is mandatory",
+            "privacy regulations"
+        ]
+        
+        # Normalize description for checking
+        normalized_desc = self._normalize_text_for_template_check(description)
+        
+        missing_components = []
+        for component in required_components:
+            normalized_component = self._normalize_text_for_template_check(component)
+            if normalized_component not in normalized_desc:
+                missing_components.append(component)
+        
+        if missing_components:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Authorization Template",
+                f"Missing required authorization template components: {', '.join(missing_components)}",
+                "info.description",
+                "Add the mandatory authorization template as specified in CAMARA-API-access-and-user-consent.md"
+            ))
+        
+        # Check for required header specifically
+        if not re.search(r'#\s*Authorization\s+and\s+authentication', description, re.IGNORECASE):
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Authorization Template",
+                "Missing required '# Authorization and authentication' header",
+                "info.description"
+            ))
+
+    def _validate_error_responses_template(self, description: str, result: ValidationResult):
+        """Validate mandatory error responses template in info.description (new in v0.6)"""
+        if not description:
+            # Already reported in authorization template check
+            return
+        
+        # Only check this template for v0.6 and above
+        try:
+            current_version = float(self.expected_commonalities_version)
+            if current_version < 0.6:
+                return  # Not required for versions before 0.6
+        except (ValueError, AttributeError):
+            pass  # If version parsing fails, include the check
+        
+        # Required error responses template components
+        required_components = [
+            "# Additional CAMARA error responses",
+            "not exhaustive",
+            "CAMARA API Design Guide",
+            "CAMARA_common.yaml",
+            "Commonalities Release",
+            "API Readiness Checklist",
+            "501 - NOT_IMPLEMENTED"
+        ]
+        
+        # Normalize description for checking
+        normalized_desc = self._normalize_text_for_template_check(description)
+        
+        missing_components = []
+        for component in required_components:
+            normalized_component = self._normalize_text_for_template_check(component)
+            if normalized_component not in normalized_desc:
+                missing_components.append(component)
+        
+        if missing_components:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Error Responses Template",
+                f"Missing required error responses template components: {', '.join(missing_components)}",
+                "info.description",
+                "Add the mandatory 'Additional CAMARA error responses' template as specified in CAMARA API Design Guide v0.6"
+            ))
+        
+        # Check for required header specifically
+        if not re.search(r'#\s*Additional\s+CAMARA\s+error\s+responses', description, re.IGNORECASE):
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Error Responses Template",
+                "Missing required '# Additional CAMARA error responses' header",
+                "info.description"
             ))
 
     def _validate_external_docs(self, api_spec: dict, result: ValidationResult):
@@ -552,6 +664,9 @@ class CAMARAAPIValidator:
                 operation_name
             ))
 
+        # Additional security validation for callbacks and OpenID Connect
+        self._validate_operation_security(operation, operation_name, result)
+
     def _validate_responses(self, responses: dict, operation_name: str, result: ValidationResult):
         """Validate response definitions"""
         # Check for success response
@@ -678,6 +793,9 @@ class CAMARAAPIValidator:
             ))
             return
         
+        # Store api_spec reference for cross-method validation
+        self.api_spec = api_spec
+
         # Check schemas
         schemas = components.get('schemas', {})
         self._validate_schemas(schemas, result)
@@ -737,38 +855,172 @@ class CAMARAAPIValidator:
 
     def _validate_security_schemes_section(self, security_schemes: dict, result: ValidationResult):
         """Validate security schemes section"""
+        # Use existing API type detection
+        api_type = self._detect_api_type(self.api_spec)
+        is_subscription_api = api_type in [APIType.IMPLICIT_SUBSCRIPTION, APIType.EXPLICIT_SUBSCRIPTION]
+        
+        # Check for required openId scheme
+        if 'openId' not in security_schemes:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Security Schemes",
+                "Missing required 'openId' security scheme",
+                "components.securitySchemes",
+                "Add openId scheme with type: openIdConnect"
+            ))
+        
+        # For subscription APIs, check for notificationsBearerAuth
+        if is_subscription_api and 'notificationsBearerAuth' not in security_schemes:
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Security Schemes",
+                "Subscription APIs must include 'notificationsBearerAuth' security scheme",
+                "components.securitySchemes",
+                "Add notificationsBearerAuth scheme for callback authentication"
+            ))
+        
         for scheme_name, scheme_def in security_schemes.items():
             if isinstance(scheme_def, dict):
                 scheme_type = scheme_def.get('type')
-                if scheme_type == 'oauth2':
-                    self._validate_oauth2_scheme(scheme_def, scheme_name, result)
+                
+                if scheme_type == 'openIdConnect':
+                    self._validate_openid_connect_scheme(scheme_def, scheme_name, result)
+                    
+                    # Check naming convention
+                    if scheme_name != 'openId':
+                        result.issues.append(ValidationIssue(
+                            Severity.MEDIUM, "Security Schemes",
+                            f"OpenID Connect scheme should be named 'openId', found '{scheme_name}'",
+                            f"components.securitySchemes.{scheme_name}"
+                        ))
+                
+                elif scheme_type == 'http' and scheme_name == 'notificationsBearerAuth':
+                    self._validate_notifications_bearer_auth_scheme(scheme_def, scheme_name, result)
+                
+                elif scheme_type == 'oauth2':
+                    result.issues.append(ValidationIssue(
+                        Severity.CRITICAL, "Security Schemes",
+                        f"Use 'openIdConnect' type instead of 'oauth2' for scheme '{scheme_name}'",
+                        f"components.securitySchemes.{scheme_name}.type",
+                        "CAMARA requires OpenID Connect, not OAuth2"
+                    ))
+                
+                elif scheme_type not in ['openIdConnect', 'http']:
+                    result.issues.append(ValidationIssue(
+                        Severity.MEDIUM, "Security Schemes",
+                        f"Unexpected security scheme type '{scheme_type}' for '{scheme_name}'",
+                        f"components.securitySchemes.{scheme_name}.type"
+                    ))
 
-    def _validate_oauth2_scheme(self, scheme_def: dict, scheme_name: str, result: ValidationResult):
-        """Validate OAuth2 security scheme"""
-        flows = scheme_def.get('flows', {})
-        if not flows:
+
+    def _validate_openid_connect_scheme(self, scheme_def: dict, scheme_name: str, result: ValidationResult):
+        """Validate OpenID Connect security scheme"""
+        # Check for required openIdConnectUrl
+        if 'openIdConnectUrl' not in scheme_def:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Security Schemes",
-                f"OAuth2 scheme `{scheme_name}` missing flows",
-                f"components.securitySchemes.{scheme_name}.flows"
+                f"OpenID Connect scheme `{scheme_name}` missing openIdConnectUrl",
+                f"components.securitySchemes.{scheme_name}.openIdConnectUrl"
             ))
             return
         
-        # Check for client credentials flow (common in CAMARA)
-        client_credentials = flows.get('clientCredentials', {})
-        if client_credentials:
-            if 'tokenUrl' not in client_credentials:
+        # Validate URL format
+        connect_url = scheme_def.get('openIdConnectUrl', '')
+        if not connect_url.startswith(('https://', 'http://')):
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Security Schemes",
+                f"OpenID Connect URL should use HTTPS: `{connect_url}`",
+                f"components.securitySchemes.{scheme_name}.openIdConnectUrl"
+            ))
+        
+        # Check for well-known endpoint pattern
+        if '.well-known/openid-configuration' not in connect_url:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Security Schemes",
+                f"OpenID Connect URL should point to well-known configuration: `{connect_url}`",
+                f"components.securitySchemes.{scheme_name}.openIdConnectUrl"
+            ))
+
+    def _validate_notifications_bearer_auth_scheme(self, scheme_def: dict, scheme_name: str, result: ValidationResult):
+        """Validate notificationsBearerAuth security scheme for subscription APIs"""
+        # Check type
+        if scheme_def.get('type') != 'http':
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Security Schemes",
+                f"Notifications Bearer Auth scheme `{scheme_name}` must have type 'http'",
+                f"components.securitySchemes.{scheme_name}.type"
+            ))
+        
+        # Check scheme
+        if scheme_def.get('scheme') != 'bearer':
+            result.issues.append(ValidationIssue(
+                Severity.CRITICAL, "Security Schemes",
+                f"Notifications Bearer Auth scheme `{scheme_name}` must have scheme 'bearer'",
+                f"components.securitySchemes.{scheme_name}.scheme"
+            ))
+        
+        # Check bearerFormat (should reference sinkCredential)
+        bearer_format = scheme_def.get('bearerFormat', '')
+        if 'sinkCredential' not in bearer_format:
+            result.issues.append(ValidationIssue(
+                Severity.MEDIUM, "Security Schemes",
+                f"Notifications Bearer Auth scheme `{scheme_name}` should reference sinkCredential in bearerFormat",
+                f"components.securitySchemes.{scheme_name}.bearerFormat"
+            ))
+
+    def _validate_operation_security(self, operation: dict, operation_name: str, result: ValidationResult):
+        """Validate operation-level security requirements for callbacks and OpenID Connect usage"""
+        security = operation.get('security')
+        
+        # Check if this is a callback operation (different security rules)
+        is_callback = 'callbacks' in operation_name.lower() or 'notification' in operation_name.lower()
+        
+        if is_callback:
+            # Callback operations MUST support notificationsBearerAuth and MAY have empty security
+            if security is None:
                 result.issues.append(ValidationIssue(
-                    Severity.CRITICAL, "Security Schemes",
-                    f"OAuth2 clientCredentials flow missing tokenUrl",
-                    f"components.securitySchemes.{scheme_name}.flows.clientCredentials"
+                    Severity.CRITICAL, "Operation Security",
+                    f"Callback operation must have security requirements with notificationsBearerAuth: {operation_name}",
+                    f"{operation_name}.security"
                 ))
+            else:
+                has_notifications_bearer_auth = False
+                has_empty_security = False
+                
+                for security_req in security:
+                    if isinstance(security_req, dict):
+                        if not security_req:  # Empty security object
+                            has_empty_security = True
+                        elif 'notificationsBearerAuth' in security_req:
+                            has_notifications_bearer_auth = True
+                
+                # MUST have notificationsBearerAuth
+                if not has_notifications_bearer_auth:
+                    result.issues.append(ValidationIssue(
+                        Severity.CRITICAL, "Operation Security",
+                        f"Callback operation must include notificationsBearerAuth: {operation_name}",
+                        f"{operation_name}.security",
+                        "Add notificationsBearerAuth to security requirements"
+                    ))
+                
+                # Validate that it's not ONLY empty security
+                if has_empty_security and not has_notifications_bearer_auth:
+                    result.issues.append(ValidationIssue(
+                        Severity.CRITICAL, "Operation Security",
+                        f"Callback operation cannot have only empty security, must include notificationsBearerAuth: {operation_name}",
+                        f"{operation_name}.security"
+                    ))
+        elif security:
+            # For regular operations with security, validate they use openId
+            has_openid = False
+            for security_req in security:
+                if isinstance(security_req, dict) and 'openId' in security_req:
+                    has_openid = True
+                    break
             
-            if 'scopes' not in client_credentials:
+            if not has_openid:
                 result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Security Schemes",
-                    f"OAuth2 clientCredentials flow missing scopes",
-                    f"components.securitySchemes.{scheme_name}.flows.clientCredentials"
+                    Severity.MEDIUM, "Operation Security",
+                    f"Operation should use 'openId' security scheme: {operation_name}",
+                    f"{operation_name}.security"
                 ))
 
     def _validate_security_schemes(self, api_spec: dict, result: ValidationResult):
@@ -799,19 +1051,39 @@ class CAMARAAPIValidator:
         security_schemes = components.get('securitySchemes', {})
         
         for scheme_name, scheme_def in security_schemes.items():
-            if isinstance(scheme_def, dict) and scheme_def.get('type') == 'oauth2':
-                flows = scheme_def.get('flows', {})
-                for flow_name, flow_def in flows.items():
-                    if isinstance(flow_def, dict):
-                        scopes = flow_def.get('scopes', {})
-                        for scope_name in scopes.keys():
-                            # Check kebab-case pattern
-                            if not re.match(r'^[a-z0-9-]+:[a-z0-9-]+$', scope_name):
-                                result.issues.append(ValidationIssue(
-                                    Severity.MEDIUM, "Scope Naming",
-                                    f"Scope name should follow pattern `api-name:operation`: `{scope_name}`",
-                                    f"components.securitySchemes.{scheme_name}.flows.{flow_name}.scopes"
-                                ))
+            if isinstance(scheme_def, dict):
+                scheme_type = scheme_def.get('type')
+                
+                if scheme_type == 'openIdConnect':
+                    # OpenID Connect doesn't define scopes in the scheme itself
+                    # Scope validation happens at operation level through security requirements
+                    continue
+                elif scheme_type == 'oauth2':
+                    # Direct OAuth2 schemes are not used in CAMARA (OpenID Connect is used instead)
+                    # This will be flagged as critical error in security schemes validation
+                    # Skip scope validation for OAuth2 schemes
+                    continue
+                # For other scheme types (like 'http' for notificationsBearerAuth), no scope validation needed
+        
+        # Validate scopes at operation level instead
+        paths = api_spec.get('paths', {})
+        for path, path_obj in paths.items():
+            if isinstance(path_obj, dict):
+                for method, operation in path_obj.items():
+                    if method in ['get', 'post', 'put', 'delete', 'patch'] and isinstance(operation, dict):
+                        security = operation.get('security', [])
+                        for security_req in security:
+                            if isinstance(security_req, dict):
+                                for scheme_name, scopes in security_req.items():
+                                    if isinstance(scopes, list):
+                                        for scope_name in scopes:
+                                            # Check kebab-case pattern for scopes
+                                            if not re.match(r'^[a-z0-9-]+:[a-z0-9-]+(?::[a-z0-9-]+)?$', scope_name):
+                                                result.issues.append(ValidationIssue(
+                                                    Severity.MEDIUM, "Scope Naming",
+                                                    f"Scope name should follow pattern `api-name:[resource:]action`: `{scope_name}`",
+                                                    f"{method.upper()} {path}.security"
+                                                ))
 
     def _extract_api_name_from_servers(self, api_spec: dict) -> Optional[str]:
         """Extract api-name from servers[*].url property
@@ -1328,9 +1600,101 @@ class CAMARAAPIValidator:
                     "Ensure all files use the same commonalities version"
                 ))
 
-    def validate_test_alignment(self, api_file: str, test_dir: str) -> TestAlignmentResult:
-        """Validate test definitions alignment with API specs"""
+    def map_and_validate_test_files_to_apis(self, api_files: List[str], test_dir: str) -> List[TestAlignmentResult]:
+        """Map test files to APIs and validate each pair"""
+        test_results = []
+        
+        # Extract all API names first
+        all_api_names = []
+        for api_file in api_files:
+            try:
+                with open(api_file, 'r', encoding='utf-8') as f:
+                    api_spec = yaml.safe_load(f)
+                
+                # Extract api-name from servers URL
+                api_name = self._extract_api_name_from_servers(api_spec)
+                
+                # Fallback to filename if servers extraction fails
+                if not api_name:
+                    api_name = Path(api_file).stem
+                
+                all_api_names.append(api_name)
+            except Exception:
+                # If we can't load the API file, use filename as fallback
+                all_api_names.append(Path(api_file).stem)
+        
+        # Find all test files
+        test_path = Path(test_dir)
+        if not test_path.exists():
+            # No test directory - create empty results for each API
+            for api_file in api_files:
+                result = TestAlignmentResult(api_file=api_file)
+                result.checks_performed.append("Test alignment validation")
+                result.issues.append(ValidationIssue(
+                    Severity.CRITICAL, "Test Directory",
+                    f"Test directory does not exist: {test_dir}",
+                    test_dir
+                ))
+                test_results.append(result)
+            return test_results
+        
+        all_test_files = [f.stem for f in test_path.glob("*.feature")]
+        
+        # Simple assignment logic: test_file_stem -> api_name
+        test_file_assignments = {}
+        
+        for api_name in all_api_names:
+            for test_file_stem in all_test_files:
+                # Check for match (exact or prefix)
+                is_exact_match = (test_file_stem == api_name)
+                is_prefix_match = test_file_stem.startswith(f"{api_name}-")
+                
+                if is_exact_match or is_prefix_match:
+                    current_assignment = test_file_assignments.get(test_file_stem)
+                    
+                    if current_assignment is None:
+                        # No assignment yet - assign it
+                        test_file_assignments[test_file_stem] = api_name
+                    elif len(api_name) > len(current_assignment):
+                        # Longer prefix wins - reassign
+                        test_file_assignments[test_file_stem] = api_name
+        
+        # Create reverse mapping: api_name -> [test_file_paths]
+        api_to_test_files = {api_name: [] for api_name in all_api_names}
+        for test_file_stem, api_name in test_file_assignments.items():
+            test_file_path = str(test_path / f"{test_file_stem}.feature")
+            api_to_test_files[api_name].append(test_file_path)
+        
+        # Find orphan test files
+        orphan_test_files = []
+        for test_file_stem in all_test_files:
+            if test_file_stem not in test_file_assignments:
+                orphan_test_files.append(f"{test_file_stem}.feature")
+        
+        # Validate each API with its assigned test files
+        for api_file in api_files:
+            api_name = all_api_names[api_files.index(api_file)]
+            assigned_test_files = api_to_test_files[api_name]
+            
+            result = self.validate_test_alignment_single(api_file, api_name, assigned_test_files)
+            test_results.append(result)
+        
+        # Report orphan test files as issues in the first API result
+        if orphan_test_files and test_results:
+            for orphan_file in orphan_test_files:
+                test_results[0].issues.append(ValidationIssue(
+                    Severity.MEDIUM, "Orphan Test Files",
+                    f"Test file `{orphan_file}` does not match any API",
+                    f"{test_dir}/{orphan_file}",
+                    f"Rename to match an API: {', '.join(all_api_names)}"
+                ))
+        
+        return test_results
+
+    def validate_test_alignment_single(self, api_file: str, api_name: str, assigned_test_files: List[str]) -> TestAlignmentResult:
+        """Validate test alignment for a single API with its assigned test files"""
         result = TestAlignmentResult(api_file=api_file)
+        result.test_files = assigned_test_files
         result.checks_performed.append("Test alignment validation")
         
         # Load API spec
@@ -1350,28 +1714,11 @@ class CAMARAAPIValidator:
         api_version = api_info.get('version', '')
         api_title = api_info.get('title', '')
         
-        # Extract api-name from servers URL (correct method)
-        api_name = self._extract_api_name_from_servers(api_spec)
-        
-        # Fallback to filename if servers extraction fails
-        if not api_name:
-            api_name = Path(api_file).stem
-            result.issues.append(ValidationIssue(
-                Severity.MEDIUM, "API Configuration",
-                "Using filename as api-name fallback due to invalid servers[*].url format",
-                "servers",
-                "Ensure servers[*].url follows format: {apiRoot}/<api-name>/<api-version>"
-            ))
-        
-        # Find test files
-        test_files = self._find_test_files(test_dir, api_name)
-        result.test_files = test_files
-        
-        if not test_files:
+        if not assigned_test_files:
             result.issues.append(ValidationIssue(
                 Severity.CRITICAL, "Test Files",
                 f"No test files found for API `{api_name}`",
-                test_dir,
+                "test directory",
                 f"Create either `{api_name}.feature` or `{api_name}-<operationId>.feature` files"
             ))
             return result
@@ -1379,31 +1726,12 @@ class CAMARAAPIValidator:
         # Extract operation IDs from API
         api_operations = self._extract_operation_ids(api_spec)
         
-        # Validate each test file
-        for test_file in test_files:
+        # Validate each assigned test file
+        for test_file in assigned_test_files:
             self._validate_test_file(test_file, api_name, api_version, api_title, 
-                                   api_operations, result)
+                                api_operations, result)
         
         return result
-
-    def _find_test_files(self, test_dir: str, api_name: str) -> List[str]:
-        """Find test files for the given API"""
-        test_files = []
-        test_path = Path(test_dir)
-        
-        if not test_path.exists():
-            return test_files
-        
-        # Look for api-name.feature
-        main_test = test_path / f"{api_name}.feature"
-        if main_test.exists():
-            test_files.append(str(main_test))
-        
-        # Look for api-name-*.feature files
-        for test_file in test_path.glob(f"{api_name}-*.feature"):
-            test_files.append(str(test_file))
-        
-        return test_files
 
     def _extract_operation_ids(self, api_spec: dict) -> List[str]:
         """Extract all operation IDs from API spec"""
@@ -1454,8 +1782,6 @@ class CAMARAAPIValidator:
                     test_file,
                     "Update test scenarios to use proper version references"
                 ))
-    
-    # Check for version in Feature line (can be line 1 or 2)
         
         # Check for version in Feature line (can be line 1 or 2)
         feature_line = None
@@ -2023,18 +2349,19 @@ def main():
     if os.path.exists(test_dir):
         if args.verbose:
             print(f"\n🧪 Performing test alignment validation...")
-        for api_file in api_files:
-            try:
-                test_result = validator.validate_test_alignment(api_file, test_dir)
-                test_results.append(test_result)
-                
-                if args.verbose:
+        try:
+            # Use the simplified two-level validation approach
+            test_results = validator.map_and_validate_test_files_to_apis(api_files, test_dir)
+            
+            if args.verbose:
+                for test_result in test_results:
+                    api_name = Path(test_result.api_file).stem
                     test_critical = len([i for i in test_result.issues if i.severity == Severity.CRITICAL])
                     test_medium = len([i for i in test_result.issues if i.severity == Severity.MEDIUM])
                     test_low = len([i for i in test_result.issues if i.severity == Severity.LOW])
-                    print(f"  📋 {Path(api_file).stem}: {len(test_result.test_files)} test files, {test_critical} critical, {test_medium} medium, {test_low} low")
-            except Exception as e:
-                print(f"  ❌ Error in test validation for {api_file}: {str(e)}")
+                    print(f"  📋 {api_name}: {len(test_result.test_files)} test files, {test_critical} critical, {test_medium} medium, {test_low} low")
+        except Exception as e:
+            print(f"  ❌ Error in test validation: {str(e)}")
     
     # Generate reports
     try:
@@ -2092,9 +2419,13 @@ def main():
     print(f"Total Medium Issues: {total_medium}")
     print(f"Total Low Issues: {total_low}")
     
-    # Always exit successfully - we are a reporter, not a judge
-    print("\n📋 Analysis complete with comprehensive validation coverage.")
-    sys.exit(0)
+    # Exit with appropriate code based on critical issues found
+    if total_critical > 0:
+        print(f"\n⚠️ Exiting with code 1 due to {total_critical} critical issue(s) found")
+        sys.exit(1)  # Critical issues found - workflow will show "X critical issue(s) found"
+    else:
+        print("\n✅ Exiting with code 0 - no critical issues found")
+        sys.exit(0)  # No critical issues - workflow will show "No critical issues found"
 
 if __name__ == "__main__":
     main()

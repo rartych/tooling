@@ -998,9 +998,20 @@ class CAMARAAPIValidator:
                 f"components.securitySchemes.{scheme_name}.bearerFormat"
             ))
 
-    def _validate_operation_security(self, operation: dict, operation_name: str, result: ValidationResult):
-        """Validate operation-level security requirements for callbacks and OpenID Connect usage"""
-        security = operation.get('security')
+    def _validate_operation_security(self, operation: dict, path: str, method: str, 
+                                api_name: str, result: ValidationResult):
+        """Validate security settings for an operation"""
+        
+        # Detect API type first
+        api_type = self._detect_api_type(self.api_spec, api_name)
+        
+        # For explicit subscription APIs, use special validation
+        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
+            self._validate_explicit_subscription_scopes(operation, path, method, api_name, result)
+            return
+        
+        # For other API types, continue with existing validation logic
+        security = operation.get('security', [])
         
         # Check if this is a callback operation (different security rules)
         is_callback = 'callbacks' in operation_name.lower() or 'notification' in operation_name.lower()
@@ -1054,6 +1065,113 @@ class CAMARAAPIValidator:
                     f"Operation should use 'openId' security scheme: {operation_name}",
                     f"{operation_name}.security"
                 ))
+
+    def _validate_explicit_subscription_scopes(self, operation: dict, path: str, method: str, 
+                                            api_name: str, result: ValidationResult):
+        """Validate scopes for explicit subscription APIs according to CAMARA guidelines
+        
+        For explicit subscription APIs:
+        - CREATE operations: api-name:event-type:create
+        - READ operations: api-name:read
+        - DELETE operations: api-name:delete
+        """
+        security = operation.get('security', [])
+        
+        for security_item in security:
+            if isinstance(security_item, dict) and 'openId' in security_item:
+                scopes = security_item['openId']
+                
+                if not isinstance(scopes, list):
+                    continue
+                
+                for scope in scopes:
+                    # Determine expected scope pattern based on operation
+                    if method.lower() == 'post' and path.endswith('/subscriptions'):
+                        # CREATE operation - should have event type in scope
+                        if not self._is_valid_event_subscription_create_scope(scope, api_name):
+                            result.issues.append(ValidationIssue(
+                                Severity.MEDIUM, "Scope Naming",
+                                f"Event subscription creation scope should follow pattern `api-name:event-type:create`: `{scope}`",
+                                f"{method.upper()} {path}.security",
+                                "Use format: api-name:org.camaraproject.api-name.version.event-name:create"
+                            ))
+                    
+                    elif method.lower() == 'get':
+                        # READ operation
+                        expected_scope = f"{api_name}:read"
+                        if scope != expected_scope:
+                            result.issues.append(ValidationIssue(
+                                Severity.MEDIUM, "Scope Naming",
+                                f"Event subscription read scope should be `{expected_scope}`, found: `{scope}`",
+                                f"{method.upper()} {path}.security"
+                            ))
+                    
+                    elif method.lower() == 'delete':
+                        # DELETE operation
+                        expected_scope = f"{api_name}:delete"
+                        if scope != expected_scope:
+                            result.issues.append(ValidationIssue(
+                                Severity.MEDIUM, "Scope Naming",
+                                f"Event subscription delete scope should be `{expected_scope}`, found: `{scope}`",
+                                f"{method.upper()} {path}.security"
+                            ))
+
+    def _is_valid_event_subscription_create_scope(self, scope: str, api_name: str) -> bool:
+        """Check if a scope follows the event subscription create pattern
+        
+        Pattern: api-name:event-type:create
+        Where event-type is like: org.camaraproject.api-name.version.event-name
+        """
+        parts = scope.split(':')
+        
+        # Should have exactly 3 parts: api-name:event-type:create
+        if len(parts) != 3:
+            return False
+        
+        scope_api_name, event_type, action = parts
+        
+        # Check api name matches
+        if scope_api_name != api_name:
+            return False
+        
+        # Check action is 'create'
+        if action != 'create':
+            return False
+        
+        # Check event type format (org.camaraproject.api-name.version.event-name)
+        if not event_type.startswith('org.camaraproject.'):
+            return False
+        
+        # Optionally, verify the event type exists in the API spec
+        if hasattr(self, 'api_spec'):
+            # Look for the event type in the API's defined event types
+            if not self._event_type_exists_in_spec(event_type):
+                return False
+        
+        return True
+
+    def _event_type_exists_in_spec(self, event_type: str) -> bool:
+        """Check if an event type is defined in the API specification"""
+        # Look in common places where event types are defined
+        paths_to_check = [
+            ['components', 'schemas', 'SubscriptionEventType', 'enum'],
+            ['components', 'schemas', 'EventTypeNotification', 'enum'],
+            # Add more paths as needed based on API structure
+        ]
+        
+        for path in paths_to_check:
+            current = self.api_spec
+            for key in path:
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                else:
+                    current = None
+                    break
+            
+            if isinstance(current, list) and event_type in current:
+                return True
+        
+        return True  # Default to true if we can't find the enum
 
     def _validate_security_schemes(self, api_spec: dict, result: ValidationResult):
         """Validate top-level security configuration"""

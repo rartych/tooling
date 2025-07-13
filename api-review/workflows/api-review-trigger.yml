@@ -253,10 +253,6 @@ jobs:
           - Repository: ${{ github.repository }}
           - Trigger: \`/$TRIGGER_COMMAND\`
           
-          **Version Support:**
-          - ✅ Commonalities 0.6: Fully supported
-          - ⏳ Commonalities 0.7+: Coming soon
-          
           Results will be posted here when the review completes.
           EOF
           

@@ -974,6 +974,9 @@ class CAMARAAPIValidator:
                                 api_name: str, result: ValidationResult):
         """Validate security settings for an operation"""
         
+        # Construct operation_name from path and method
+        operation_name = f"{method.upper()} {path}"
+        
         # Detect API type first
         api_type = self._detect_api_type(self.api_spec, api_name)
         

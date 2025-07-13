@@ -1170,6 +1170,13 @@ class CAMARAAPIValidator:
 
     def _check_scope_naming_patterns(self, api_spec: dict, result: ValidationResult):
         """Check scope naming patterns for consistency"""
+        
+        # Skip this check entirely for explicit subscription APIs
+        # They have their own validation in _validate_operation_security
+        api_type = self._detect_api_type(api_spec)
+        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
+            return
+        
         result.checks_performed.append("Scope naming pattern validation")
         
         components = api_spec.get('components', {})

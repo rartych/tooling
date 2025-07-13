@@ -225,6 +225,7 @@ class CAMARAAPIValidator:
                 ))
 
             self._current_api_name = api_name
+            result.api_name = api_name
 
             result.version = info.get('version', 'unknown')
             

@@ -608,6 +608,9 @@ class CAMARAAPIValidator:
             ))
             return
         
+        # Get api_name for security validation
+        api_name = self._current_api_name if hasattr(self, '_current_api_name') else ''
+        
         for path, path_obj in paths.items():
             if not isinstance(path_obj, dict):
                 continue
@@ -615,6 +618,10 @@ class CAMARAAPIValidator:
             for method, operation in path_obj.items():
                 if method in ['get', 'post', 'put', 'delete', 'patch', 'head', 'options', 'trace']:
                     self._validate_operation(operation, f"{method.upper()} {path}", result)
+                    
+                    # Add security validation with proper parameters
+                    if isinstance(operation, dict):
+                        self._validate_operation_security(operation, path, method, api_name, result)
 
     def _validate_operation(self, operation: dict, operation_name: str, result: ValidationResult):
         """Validate individual operation with detailed checks"""
@@ -663,9 +670,6 @@ class CAMARAAPIValidator:
                 "Consider adding security requirements for modifying operations",
                 operation_name
             ))
-
-        # Additional security validation for callbacks and OpenID Connect
-        self._validate_operation_security(operation, operation_name, result)
 
     def _validate_responses(self, responses: dict, operation_name: str, result: ValidationResult):
         """Validate response definitions"""

@@ -640,6 +640,9 @@ class CAMARAAPIValidator:
             ))
             return
         
+        # Get api_name for security validation
+        api_name = self._current_api_name if hasattr(self, '_current_api_name') else ''
+        
         for path, path_obj in paths.items():
             if not isinstance(path_obj, dict):
                 continue
@@ -647,6 +650,10 @@ class CAMARAAPIValidator:
             for method, operation in path_obj.items():
                 if method in ['get', 'post', 'put', 'delete', 'patch', 'head', 'options', 'trace']:
                     self._validate_operation(operation, f"{method.upper()} {path}", result)
+                    
+                    # Add security validation with proper parameters
+                    if isinstance(operation, dict):
+                        self._validate_operation_security(operation, path, method, api_name, result)
 
     def _validate_operation(self, operation: dict, operation_name: str, result: ValidationResult):
         """Validate individual operation with detailed checks"""
@@ -695,9 +702,6 @@ class CAMARAAPIValidator:
                 "Consider adding security requirements for modifying operations",
                 operation_name
             ))
-
-        # Additional security validation for callbacks and OpenID Connect
-        self._validate_operation_security(operation, operation_name, result)
 
     def _validate_responses(self, responses: dict, operation_name: str, result: ValidationResult):
         """Validate response definitions"""
@@ -1002,18 +1006,13 @@ class CAMARAAPIValidator:
                                 api_name: str, result: ValidationResult):
         """Validate security settings for an operation"""
         
-        # Detect API type first
-        api_type = self._detect_api_type(self.api_spec, api_name)
+        # Construct operation_name from path and method
+        operation_name = f"{method.upper()} {path}"
         
-        # For explicit subscription APIs, use special validation
-        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
-            self._validate_explicit_subscription_scopes(operation, path, method, api_name, result)
-            return
-        
-        # For other API types, continue with existing validation logic
+        # Get security requirements
         security = operation.get('security', [])
         
-        # Check if this is a callback operation (different security rules)
+        # Check if this is a callback operation FIRST (applies to all API types)
         is_callback = 'callbacks' in operation_name.lower() or 'notification' in operation_name.lower()
         
         if is_callback:
@@ -1051,12 +1050,34 @@ class CAMARAAPIValidator:
                         f"Callback operation cannot have only empty security, must include notificationsBearerAuth: {operation_name}",
                         f"{operation_name}.security"
                     ))
-        elif security:
+            return  # Done with callback validation
+        
+        # For non-callback operations, check API type
+        api_type = self._detect_api_type(self.api_spec, api_name)
+        
+        # For explicit subscription APIs, use special validation
+        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
+            self._validate_explicit_subscription_scopes(operation, path, method, api_name, result)
+            return
+        
+        # For other API types (regular and implicit subscription), validate standard security
+        if security:
             # For regular operations with security, validate they use openId
             has_openid = False
             for security_req in security:
                 if isinstance(security_req, dict) and 'openId' in security_req:
                     has_openid = True
+                    
+                    # Also validate scope naming pattern for regular APIs
+                    scopes = security_req['openId']
+                    if isinstance(scopes, list):
+                        for scope_name in scopes:
+                            if not re.match(r'^[a-z0-9-]+:[a-z0-9-]+(?::[a-z0-9-]+)?$', scope_name):
+                                result.issues.append(ValidationIssue(
+                                    Severity.MEDIUM, "Scope Naming",
+                                    f"Scope name should follow pattern `api-name:[resource:]action`: `{scope_name}`",
+                                    f"{operation_name}.security"
+                                ))
                     break
             
             if not has_openid:
@@ -1195,6 +1216,13 @@ class CAMARAAPIValidator:
 
     def _check_scope_naming_patterns(self, api_spec: dict, result: ValidationResult):
         """Check scope naming patterns for consistency"""
+        
+        # Skip this check entirely for explicit subscription APIs
+        # They have their own validation in _validate_operation_security
+        api_type = self._detect_api_type(api_spec)
+        if api_type == APIType.EXPLICIT_SUBSCRIPTION:
+            return
+        
         result.checks_performed.append("Scope naming pattern validation")
         
         components = api_spec.get('components', {})

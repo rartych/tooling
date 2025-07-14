@@ -147,6 +147,7 @@ class CAMARAAPIValidator:
         self.implemented_version = "0.6"  # This validator only implements v0.6 rules
         self.api_spec = None  # Will store the API spec for reference resolution
         self.review_type = review_type  # Store review type for validation behavior
+        self._current_api_name = None  # Store current API name for type detection
 
         # Warn if requested version doesn't match implemented version
         if self.expected_commonalities_version != self.implemented_version:
@@ -223,12 +224,13 @@ class CAMARAAPIValidator:
                     "Ensure servers[*].url follows format: {apiRoot}/<api-name>/<api-version>"
                 ))
 
+            self._current_api_name = api_name
             result.api_name = api_name
 
             result.version = info.get('version', 'unknown')
             
             # Detect API type first for targeted validation
-            result.api_type = self._detect_api_type(api_spec)
+            result.api_type = self._detect_api_type(api_spec, api_name)
             result.checks_performed.append(f"API type detection: {result.api_type.value}")
 
             # Check for Commonalities version mismatch
@@ -304,9 +306,22 @@ class CAMARAAPIValidator:
         
         return common_checks
 
-    def _detect_api_type(self, api_spec: dict) -> APIType:
+    def _detect_api_type(self, api_spec: dict, api_name: str = None) -> APIType:
         """Enhanced API type detection with better subscription pattern recognition"""
         paths = api_spec.get('paths', {})
+        
+        # Use provided api_name or fall back to stored one
+        if api_name is None and hasattr(self, '_current_api_name'):
+            api_name = self._current_api_name
+        
+        # Check if API name follows subscription API naming convention
+        is_subscription_api_by_name = False
+        if api_name:
+            api_name_lower = api_name.lower()
+            is_subscription_api_by_name = (
+                api_name_lower.endswith('-subscriptions') or 
+                api_name_lower.endswith('_subscriptions')
+            )
         
         # Check for explicit subscription endpoints
         subscription_patterns = ['/subscriptions', '/subscription']
@@ -340,14 +355,31 @@ class CAMARAAPIValidator:
         # Check components for subscription-related schemas
         components = api_spec.get('components', {})
         schemas = components.get('schemas', {})
+        has_event_subscription_schema = False
+        has_event_schema = False
+
         for schema_name, schema_def in schemas.items():
             schema_name_lower = schema_name.lower()
-            if any(keyword in schema_name_lower for keyword in ['subscription', 'webhook', 'event', 'notification']):
-                if 'subscription' in schema_name_lower:
-                    return APIType.EXPLICIT_SUBSCRIPTION
-                else:
-                    return APIType.IMPLICIT_SUBSCRIPTION
-        
+            
+            # Check for event/notification schemas
+            if any(keyword in schema_name_lower for keyword in ['webhook', 'event', 'notification', 'cloudevent']):
+                has_event_schema = True
+            
+            # Check for subscription schemas with SubscriptionId property
+            elif 'subscription' in schema_name_lower:
+                if isinstance(schema_def, dict):
+                    properties = schema_def.get('properties', {})
+                    # Event subscription schemas have SubscriptionId
+                    if 'subscriptionId' in properties or 'SubscriptionId' in properties:
+                        has_event_subscription_schema = True
+
+        # Make decision based on multiple factors
+        if has_event_subscription_schema and (is_subscription_api_by_name or 
+                                            any('/subscription' in path for path in paths.keys())):
+            return APIType.EXPLICIT_SUBSCRIPTION
+        elif has_event_schema:
+            return APIType.IMPLICIT_SUBSCRIPTION
+
         return APIType.REGULAR
 
     def _validate_info_object(self, api_spec: dict, result: ValidationResult):
@@ -1976,10 +2008,10 @@ class CAMARAAPIValidator:
             expected_operation = test_filename.replace(f"{api_name}-", "")
             if expected_operation not in api_operations:
                 result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Test File Naming",
+                    Severity.LOW, "Test File Naming",
                     f"Test file suggests operation `{expected_operation}` but it doesn't exist in API",
                     test_file,
-                    f"Use valid operation from: `{', '.join(api_operations)}`"
+                    f"Check if test file naming is as intended, consider to use valid operation from: `{', '.join(api_operations)}`"
                 ))
 
     def _validate_test_version_line(self, feature_line: str, api_version: str, api_title: str) -> bool:

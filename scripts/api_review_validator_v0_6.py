@@ -1830,10 +1830,10 @@ class CAMARAAPIValidator:
             expected_operation = test_filename.replace(f"{api_name}-", "")
             if expected_operation not in api_operations:
                 result.issues.append(ValidationIssue(
-                    Severity.MEDIUM, "Test File Naming",
+                    Severity.LOW, "Test File Naming",
                     f"Test file suggests operation `{expected_operation}` but it doesn't exist in API",
                     test_file,
-                    f"Use valid operation from: `{', '.join(api_operations)}`"
+                    f"Check if test file naming is as intended, consider to use valid operation from: `{', '.join(api_operations)}`"
                 ))
 
     def _validate_test_version_line(self, feature_line: str, api_version: str, api_title: str) -> bool:

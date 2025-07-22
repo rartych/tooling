@@ -2135,7 +2135,12 @@ class CAMARAAPIValidator:
 
     def _validate_test_version_line(self, feature_line: str, api_version: str, api_title: str) -> bool:
         """Check if Feature line contains the API version"""
-        # Look for version pattern in Feature line
+        # Special handling for WIP versions - accept both 'wip' and 'vwip'
+        if api_version == 'wip':
+            feature_lower = feature_line.lower()
+            return 'wip' in feature_lower or 'vwip' in feature_lower
+        
+        # Look for semantic version pattern in Feature line
         version_pattern = r'v?\d+\.\d+\.\d+(?:-rc\.\d+|-alpha\.\d+)?'
         found_versions = re.findall(version_pattern, feature_line)
         

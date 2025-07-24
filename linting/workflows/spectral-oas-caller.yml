@@ -27,9 +27,9 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  # Grant necessary write permissions for PRs, contents, and issues
+  # Grant necessary write permissions for PRs and issues
   pull-requests: write
-  contents: write
+  contents: read
   issues: write
 
 jobs:

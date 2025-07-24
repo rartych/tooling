@@ -6,7 +6,7 @@
 # steps for all PRs targeting the main branch in this repository.
 #
 # CHANGELOG:
-# - 2025-07-25: Initial version created by rartych
+# - 2025-07-25: Initial version
 #
 # USAGE:
 # - Automatically triggers on pull requests targeting main.

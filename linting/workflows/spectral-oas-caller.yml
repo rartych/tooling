@@ -6,7 +6,7 @@
 # provide more detailed output from Spectral tool (warnings, hints)  
 #
 # CHANGELOG:
-# - 2025-07-25: Initial version created by rartych
+# - 2025-07-25: Initial version created
 #
 # USAGE:
 # - Can be triggered manually via workflow_dispatch.

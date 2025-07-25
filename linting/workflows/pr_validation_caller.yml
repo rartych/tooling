@@ -43,6 +43,6 @@ jobs:
     uses: camaraproject/tooling/.github/workflows/pr_validation.yml@main
     secrets: inherit
 # Tools configuration from the tooling repository branch indicated by `configurations` variable
-# If needed, you can specify a configuration from other branch of camaraproject/tooling (uncomment below)
+# If needed, you can specify a configuration from another branch of camaraproject/tooling (uncomment below)
 #    with:
 #      configurations: staging

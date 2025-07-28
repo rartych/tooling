@@ -12,10 +12,9 @@ on:
         type: string
         required: false
         default: main
-    secrets:
-      GITHUB_TOKEN:
-        required: true  
-
+      github_token:
+        required: true
+        
 jobs:
   general:
     name: MegaLinter
@@ -49,7 +48,7 @@ jobs:
         uses: oxsecurity/megalinter/flavors/c_cpp@v8
         # configuration of Megalinter
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ inputs.github_token }}
           VALIDATE_ALL_CODEBASE: true
           PRINT_ALPACA: false
           # LINTER_RULES_PATH: ${{ github.workspace }}/lint-config/linting/config

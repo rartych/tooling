@@ -46,6 +46,7 @@ jobs:
         uses: oxsecurity/megalinter/flavors/c_cpp@v8
         # configuration of Megalinter
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: true
           PRINT_ALPACA: false
           # LINTER_RULES_PATH: ${{ github.workspace }}/lint-config/linting/config

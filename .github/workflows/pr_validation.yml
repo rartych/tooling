@@ -12,6 +12,9 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      GITHUB_TOKEN:
+        required: true  
 
 jobs:
   general:

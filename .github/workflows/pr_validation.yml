@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Add this!
       - name: Checkout linting config
         uses: actions/checkout@v4
         with:

@@ -8,10 +8,10 @@ on:
     # For a workflow to be reusable, the values for on must include workflow_call
     inputs:
       configurations:
-        description: The branch, tag, or commit to check out - containing tool configs to be used
+        description: folder containing tool configs to be used
         type: string
         required: false
-        default: main
+        default: v1.0.0
 
 jobs:
   general:
@@ -35,18 +35,17 @@ jobs:
         with:
           repository: camaraproject/tooling
           path: lint-config
-          ref: ${{ inputs.configurations }}
+          ref: v1.0.0
           sparse-checkout: |
-            linting/config/
+            linting/config/${{ inputs.configurations }}
           sparse-checkout-cone-mode: false
       - name: Copy specified folder to workspace root
-        run: cp -RT ${{ github.workspace }}/lint-config/linting/config ${{ github.workspace }}
+        run: cp -RT ${{ github.workspace }}/lint-config/linting/config${{ inputs.configurations }} ${{ github.workspace }}
       - name: MegaLinter
         id: ml
         # You can override MegaLinter flavor used to have faster performances
         # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters
-        # uses: oxsecurity/megalinter/flavors/c_cpp@v8
-        uses: oxsecurity/megalinter@v8
+        uses: oxsecurity/megalinter/flavors/c_cpp@v7
         # configuration of Megalinter
         env:
           VALIDATE_ALL_CODEBASE: true
@@ -54,24 +53,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPORTERS: SARIF,GITHUB_COMMENT
           GITHUB_STATUS_REPORTER: true
-          # SARIF_REPORTER: true
-          # LINTER_RULES_PATH: ${{ github.workspace }}/lint-config/linting/config
           DISABLE: COPYPASTE,SPELL,JAVASCRIPT,MARKDOWN
-          DISABLE_LINTERS: YAML_PRETTIER,REPOSITORY_GRYPE,REPOSITORY_SEMGREP,REPOSITORY_DEVSKIM,REPOSITORY_KICS,REPOSITORY_TRIVY,REPOSITORY_TRIVY_SBOM,REPOSITORY_TRUFFLEHOG,REPOSITORY_CHECKOV,REPOSITORY_GITLEAKS,YAML_V8R,JAVA_PMD
+          DISABLE_LINTERS: OPENAPI,YAML_PRETTIER,REPOSITORY_GRYPE,REPOSITORY_SEMGREP,REPOSITORY_DEVSKIM,REPOSITORY_KICS,REPOSITORY_TRIVY,REPOSITORY_TRIVY_SBOM,REPOSITORY_TRUFFLEHOG,REPOSITORY_CHECKOV,REPOSITORY_GITLEAKS,YAML_V8R,JAVA_PMD
           API_SPECTRAL_CONFIG_FILE: .spectral.yaml
           YAML_YAMLLINT_CONFIG_FILE: .yamllint.yaml
           GHERKIN_GHERKIN_LINT_CONFIG_FILE: .gherkin-lintrc
           API_SPECTRAL_FILTER_REGEX_INCLUDE: (code/API_definitions/)
           YAML_YAMLLINT_FILTER_REGEX_INCLUDE: (code/API_definitions/)
-          GHERKIN_GHERKIN_LINT_FILTER_REGEX_INCLUDE: (code/Test_definitions/)
-      - name: Upload SARIF file
-        id: sarif_results
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: ./megalinter-reports/megalinter-report.sarif
-          category: megalinter  # Optional: helps organize multiple SARIF uploads
-        if: always()  # Upload even if MegaLinter found issues
-          
+          GHERKIN_GHERKIN_LINT_FILTER_REGEX_INCLUDE: (code/Test_definitions/)        
       - name: Archive production artifacts
         if: success() || failure()
         uses: actions/upload-artifact@v4

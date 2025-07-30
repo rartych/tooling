@@ -45,7 +45,7 @@ jobs:
         id: ml
         # You can override MegaLinter flavor used to have faster performances
         # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters
-        uses: oxsecurity/megalinter/flavors/c_cpp@v8
+        uses: oxsecurity/megalinter/flavors/c_cpp@v7
         # configuration of Megalinter
         env:
           VALIDATE_ALL_CODEBASE: true

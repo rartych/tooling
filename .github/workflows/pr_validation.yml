@@ -67,6 +67,8 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: ./megalinter-reports/megalinter-report.sarif
+          category: megalinter  # Optional: helps organize multiple SARIF uploads
+        if: always()  # Upload even if MegaLinter found issues
           
       - name: Archive production artifacts
         if: success() || failure()

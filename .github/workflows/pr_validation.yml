@@ -45,12 +45,14 @@ jobs:
         id: ml
         # You can override MegaLinter flavor used to have faster performances
         # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters
-        uses: oxsecurity/megalinter/flavors/c_cpp@v7.13.0 # try latest v7
+        uses: oxsecurity/megalinter/flavors/c_cpp@v8
         # configuration of Megalinter
         env:
           VALIDATE_ALL_CODEBASE: true
           PRINT_ALPACA: false
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPORTERS: SARIF,GITHUB_COMMENT
+          SARIF_REPORTER: true
           # LINTER_RULES_PATH: ${{ github.workspace }}/lint-config/linting/config
           DISABLE: COPYPASTE,SPELL,JAVASCRIPT,MARKDOWN
           DISABLE_LINTERS: YAML_PRETTIER,REPOSITORY_GRYPE,REPOSITORY_SEMGREP,REPOSITORY_DEVSKIM,REPOSITORY_KICS,REPOSITORY_TRIVY,REPOSITORY_TRIVY_SBOM,REPOSITORY_TRUFFLEHOG,REPOSITORY_CHECKOV,REPOSITORY_GITLEAKS,YAML_V8R,JAVA_PMD
@@ -60,6 +62,12 @@ jobs:
           API_SPECTRAL_FILTER_REGEX_INCLUDE: (code/API_definitions/)
           YAML_YAMLLINT_FILTER_REGEX_INCLUDE: (code/API_definitions/)
           GHERKIN_GHERKIN_LINT_FILTER_REGEX_INCLUDE: (code/Test_definitions/)
+      - name: Upload SARIF file
+        id: sarif_results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ./megalinter-reports/megalinter-report.sarif
+          
       - name: Archive production artifacts
         if: success() || failure()
         uses: actions/upload-artifact@v4

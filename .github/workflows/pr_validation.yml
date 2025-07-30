@@ -35,7 +35,7 @@ jobs:
         with:
           repository: camaraproject/tooling
           path: lint-config
-          ref: v1.0.0
+          ref: refs/tags/v1.0.0
           sparse-checkout: |
             linting/config/${{ inputs.configurations }}
           sparse-checkout-cone-mode: false

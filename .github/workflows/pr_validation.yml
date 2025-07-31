@@ -37,10 +37,10 @@ jobs:
           path: lint-config
           ref: v1.0.0
           sparse-checkout: |
-            linting/config/${{ inputs.configurations }}
+            linting/config/
           sparse-checkout-cone-mode: false
       - name: Copy specified folder to workspace root
-        run: cp -RT ${{ github.workspace }}/lint-config/linting/config${{ inputs.configurations }} ${{ github.workspace }}
+        run: cp -RT ${{ github.workspace }}/lint-config/linting/config/${{ inputs.configurations }} ${{ github.workspace }}
       - name: MegaLinter
         id: ml
         # You can override MegaLinter flavor used to have faster performances

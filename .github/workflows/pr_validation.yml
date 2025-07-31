@@ -32,15 +32,16 @@ jobs:
           fetch-depth: 0  # Add this!
       - name: Checkout linting config
         uses: actions/checkout@v4
+        # ! tooling repository  to be used
         with:
-          repository: camaraproject/tooling
+          repository: rartych/tooling
           path: lint-config
-          ref: refs/tags/v1.0.0
+          ref: v1.0.0
           sparse-checkout: |
-            linting/config/${{ inputs.configurations }}
+            linting/config/${{ inputs.configurations }}/
           sparse-checkout-cone-mode: false
       - name: Copy specified folder to workspace root
-        run: cp -RT ${{ github.workspace }}/lint-config/linting/config${{ inputs.configurations }} ${{ github.workspace }}
+        run: cp -RT ${{ github.workspace }}/lint-config/linting/config/${{ inputs.configurations }} ${{ github.workspace }}
       - name: MegaLinter
         id: ml
         # You can override MegaLinter flavor used to have faster performances

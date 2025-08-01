@@ -6,7 +6,7 @@
 # steps for all PRs targeting the main branch in this repository.
 #
 # CHANGELOG:
-# - 2025-07-25: Initial version
+# - 2025-08-201: Initial version
 #
 # USAGE:
 # - Automatically triggers on pull requests targeting main.
@@ -40,9 +40,9 @@ permissions:
 jobs:
   pr_validation:
     # Invoke the reusable PR validation workflow from the main branch of camaraproject/tooling
-    uses: camaraproject/tooling/.github/workflows/pr_validation.yml@main
+    uses: camaraproject/tooling/.github/workflows/pr_validation.yml@v0
     secrets: inherit
-# Tools configuration from the tooling repository branch indicated by `configurations` variable
+# Tools configuration from the tooling repository subfolder of /linting/config/ indicated by `configurations` variable
 # If needed, you can specify a configuration from another branch of camaraproject/tooling (uncomment below)
 #    with:
 #      configurations: staging

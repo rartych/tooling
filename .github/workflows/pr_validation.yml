@@ -11,7 +11,7 @@ on:
         description: folder containing tool configs to be used
         type: string
         required: false
-        default: v1.0.0
+        default: ""
 
 jobs:
   general:
@@ -35,7 +35,7 @@ jobs:
         with:
           repository: camaraproject/tooling
           path: lint-config
-          ref: v1.0.0
+          ref: v0
           sparse-checkout: |
             linting/config/
           sparse-checkout-cone-mode: false
@@ -80,31 +80,40 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 2
-    
-    - name: Check if changelog was updated
-      id: changelog-changed
-      uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46 
-      with:
-        files: |
-          CHANGELOG.MD
-          CHANGELOG.md
-    
-    - name: Custom job logic
-      if: steps.changelog-changed.outputs.any_changed == 'true'
-      run: |
-        echo "🚀 Changelog was updated! Running custom job..."
-        
-        # Add your custom logic here
-        echo "Performing custom actions:"
-        echo "✅ Step 1: Custom processing"
-        echo "✅ Step 2: Your business logic"
-        echo "✅ Step 3: Additional operations"
-        
-        # Example: Parse changelog for latest entry
-        echo "Latest changelog entry:"
-        head -20 CHANGELOG.md || head -20 CHANGELOG.md || echo "No changelog found"
-    
-    - name: Skip message
-      if: steps.changelog-changed.outputs.any_changed != 'true'
-      run: |
-        echo "ℹ️ Changelog not updated, skipping custom job"
+
+#  changelog-changed-job:
+#    runs-on: ubuntu-latest
+#    
+#    steps:
+#    - name: Checkout repository
+#      uses: actions/checkout@v4
+#      with:
+#        fetch-depth: 2
+#    
+#    - name: Check if changelog was updated
+#      id: changelog-changed
+#      uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46 
+#      with:
+#        files: |
+#          CHANGELOG.MD
+#          CHANGELOG.md
+#    
+#    - name: Custom job logic
+#      if: steps.changelog-changed.outputs.any_changed == 'true'
+#      run: |
+#        echo "🚀 Changelog was updated! Running custom job..."
+#        
+#        # Add your custom logic here
+#        echo "Performing custom actions:"
+#        echo "✅ Step 1: Custom processing"
+#        echo "✅ Step 2: Your business logic"
+#        echo "✅ Step 3: Additional operations"
+#        
+#        # Example: Parse changelog for latest entry
+#        echo "Latest changelog entry:"
+#        head -20 CHANGELOG.md || head -20 CHANGELOG.MD || echo "No changelog found"
+#    
+#    - name: Skip message
+#      if: steps.changelog-changed.outputs.any_changed != 'true'
+#      run: |
+#        echo "ℹ️ Changelog not updated, skipping custom job"

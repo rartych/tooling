@@ -26,7 +26,7 @@ jobs:
       - name: Checkout linting config
         uses: actions/checkout@v4
         with:
-          repository: camaraproject/tooling
+          repository: rartych/tooling
           path: lint-config
           # using configurations from v0 floating tag
           ref: v0

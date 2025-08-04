@@ -71,16 +71,7 @@ jobs:
             megalinter-reports
             mega-linter.log
 
- # Job that runs only when changelog is updated
-  changelog-changed-job:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 2
-
+# Job that runs only when changelog is updated
 #  changelog-changed-job:
 #    runs-on: ubuntu-latest
 #    

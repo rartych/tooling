@@ -6,7 +6,7 @@
 # steps for all PRs targeting the main branch in this repository.
 #
 # CHANGELOG:
-# - 2025-08-01: Initial version
+# - 2025-08-01: Initial version for v0
 #
 # USAGE:
 # - Automatically triggers on pull requests targeting main.

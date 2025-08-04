@@ -6,7 +6,7 @@
 # It calls Megalinter tool with the set of configuration variables in "env". 
 #
 # CHANGELOG:
-# - 2025-08-01: Initial version for v0 version
+# - 2025-08-01: Initial version for v0
 #
 # USAGE:
 # The action is invoked by Pull Request Validation Workflow Caller in CAMARA API repositories

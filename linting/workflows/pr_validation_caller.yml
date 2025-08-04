@@ -36,13 +36,14 @@ permissions:
   pull-requests: write
   contents: write
   issues: write
+  statuses: write
 
 jobs:
   pr_validation:
-    # Invoke the reusable PR validation workflow from the main branch of camaraproject/tooling
+    # Invoke the reusable PR validation workflow from "v0" tag of camaraproject/tooling
     uses: camaraproject/tooling/.github/workflows/pr_validation.yml@v0
     secrets: inherit
 # Tools configuration from the tooling repository subfolder of /linting/config/ indicated by `configurations` variable
-# If needed, you can specify a configuration from another branch of camaraproject/tooling (uncomment below)
+# If needed, you can specify a configuration from another subfolder of camaraproject/tooling (uncomment below)
 #    with:
-#      configurations: staging
+#      configurations: api-name

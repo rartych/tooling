@@ -12,7 +12,7 @@
 # - Automatically triggers on pull requests targeting main.
 # - Can be triggered manually via workflow_dispatch.
 # - Calls by default the reusable workflow at 
-#   camaraproject/tooling/.github/workflows/pr_validation.yml@main.
+#   camaraproject/tooling/.github/workflows/pr_validation.yml@v0.
 #
 # DOCUMENTATION:
 # see https://github.com/camaraproject/tooling/tree/main/linting/docs

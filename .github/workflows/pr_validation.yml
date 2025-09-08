@@ -41,7 +41,7 @@ jobs:
       - name: Checkout linting config
         uses: actions/checkout@v4
         with:
-          repository: camaraproject/tooling
+          repository: rartych/tooling
           path: lint-config
           # using configurations from v0 floating tag
           ref: v0
@@ -50,7 +50,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Copy specified folder to workspace root
         # --strip-trailing-slashes remove any trailing slashes from each SOURCE argument - when ${{ inputs.configurations }} is empty
-        run: cp -RT --strip-trailing-slashes ${{ github.workspace }}/lint-config/linting/config/${{ inputs.configurations }}/ ${{ github.workspace }}
+        run: cp -RT --strip-trailing-slashes ${{ github.workspace }}/lint-config/linting/config/${{ inputs.configurations }} ${{ github.workspace }}
       - name: MegaLinter
         id: ml
         # You can override MegaLinter flavor used to have faster performances

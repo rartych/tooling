@@ -44,7 +44,7 @@ jobs:
           repository: rartych/tooling
           path: lint-config
           # using configurations from v0 floating tag
-          ref: v0
+          ref: main
           sparse-checkout: |
             linting/config/
           sparse-checkout-cone-mode: false

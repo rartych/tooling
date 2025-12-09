@@ -38,4 +38,8 @@ jobs:
         run: npm install -g @stoplight/spectral-functions
       - name: Run Spectral linting
         run: spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml
+      - name: Install Spectral OWASP
+        run: npm install -g @stoplight/spectral-owasp-ruleset@^2.0
+      - name: Run Spectral linting for OWASP
+        run: spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yml
         

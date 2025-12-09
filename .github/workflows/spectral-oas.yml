@@ -24,7 +24,7 @@ jobs:
       - name: Checkout linting config
         uses: actions/checkout@v4
         with:
-          repository: camaraproject/tooling
+          repository: rartych/tooling
           path: lint-config
           ref: ${{ inputs.configurations }}
           sparse-checkout: |

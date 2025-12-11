@@ -48,6 +48,8 @@ jobs:
         run: npm install -g @stoplight/spectral-owasp-ruleset@^2.0
 #      - name: List contents of github.workspace
 #        run: ls -la ${{ github.workspace }}
+      - name: Debug
+        run: node -e "console.log(require.resolve('@stoplight/spectral-owasp-ruleset'))"
       - name: Run Spectral linting for OWASP
         run: spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml
         continue-on-error: true

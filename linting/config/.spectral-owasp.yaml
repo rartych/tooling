@@ -1,4 +1,5 @@
-extends: ["https://unpkg.com/@stoplight/spectral-owasp-ruleset/dist/ruleset.mjs"]
+# extends: ["https://unpkg.com/@stoplight/spectral-owasp-ruleset/dist/ruleset.mjs"]
+extends: ["@stoplight/spectral-owasp-ruleset"]
 rules:
   owasp:api2:2023-auth-insecure-schemes : off
   owasp:api2:2023-jwt-best-practices : off

@@ -35,7 +35,7 @@ jobs:
 #      - name: Install Spectral
 #        run: npm install -g @stoplight/spectral
       - name: Install Spectral CLI
-        run: npm install --save -D @stoplight/spectral-cli
+        run: npm install -g @stoplight/spectral-cli
       - name: Install Spectral functions
         run: npm install -g @stoplight/spectral-functions
       - name: Run Spectral linting

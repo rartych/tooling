@@ -46,5 +46,5 @@ jobs:
         run: npx spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml
 
       - name: Run Spectral linting for OWASP
-        run: npx spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml
+        run: npx spectral lint code/API_definitions/*.yaml --verbose -f markdown --ruleset ${{ github.workspace }}/.spectral-owasp.yaml
         continue-on-error: true

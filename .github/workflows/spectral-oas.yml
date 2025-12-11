@@ -22,7 +22,7 @@ jobs:
         with:
           token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
       - name: Checkout linting config
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: rartych/tooling
           path: lint-config
@@ -32,12 +32,11 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Copy specified folder to workspace root
         run: cp -RT ${{ github.workspace }}/lint-config/linting/config ${{ github.workspace }}
-#      - name: Install Spectral
-#        run: npm install -g @stoplight/spectral
-#      - name: Set up Node.js
-#        uses: actions/setup-node@v4
-#        with:
-#          node-version: '20'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Install Spectral CLI and functions including OWASP ruleset
         run: npm install --save-dev @stoplight/spectral-cli @stoplight/spectral-functions @stoplight/spectral-owasp-ruleset@^2.0

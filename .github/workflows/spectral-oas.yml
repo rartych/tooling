@@ -34,17 +34,17 @@ jobs:
         run: cp -RT ${{ github.workspace }}/lint-config/linting/config ${{ github.workspace }}
 #      - name: Install Spectral
 #        run: npm install -g @stoplight/spectral
-- name: Set up Node.js
-  uses: actions/setup-node@v4
-  with:
-    node-version: '18'
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-- name: Install Spectral CLI and functions including OWASP ruleset
-  run: npm install --save-dev @stoplight/spectral-cli @stoplight/spectral-functions @stoplight/spectral-owasp-ruleset@^2.0
+      - name: Install Spectral CLI and functions including OWASP ruleset
+        run: npm install --save-dev @stoplight/spectral-cli @stoplight/spectral-functions @stoplight/spectral-owasp-ruleset@^2.0
 
-- name: Run Spectral linting
-  run: npx spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml
+      - name: Run Spectral linting
+        run: npx spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml
 
-- name: Run Spectral linting for OWASP
-  run: npx spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml
-  continue-on-error: true
+      - name: Run Spectral linting for OWASP
+        run: npx spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml
+        continue-on-error: true

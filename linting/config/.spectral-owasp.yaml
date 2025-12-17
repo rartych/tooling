@@ -19,4 +19,5 @@ rules:
   owasp:api4:2023-string-limit : warn
   owasp:api4:2023-integer-format: warn
   owasp:api4:2023-integer-limit-legacy: warn
+  owasp:api4:2023-array-limit : warn
   

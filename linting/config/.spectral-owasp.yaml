@@ -15,4 +15,8 @@ rules:
   owasp:api9:2023-inventory-environment : off
 
 # modified severity level:
-  owasp:api8:2023-define-error-responses-401 : error 
+  owasp:api8:2023-define-error-responses-401 : error
+  owasp:api4:2023-string-limit : warn
+  owasp:api4:2023-integer-format: warn
+  owasp:api4:2023-integer-limit-legacy: warn
+  

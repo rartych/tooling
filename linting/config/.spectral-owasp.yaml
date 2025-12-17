@@ -1,6 +1,7 @@
 # extends: ["https://unpkg.com/@stoplight/spectral-owasp-ruleset/dist/ruleset.mjs"]
 extends: ["@stoplight/spectral-owasp-ruleset"]
 rules:
+# excluded rules:
   owasp:api2:2023-auth-insecure-schemes : off
   owasp:api2:2023-jwt-best-practices : off
   owasp:api2:2023-no-http-basic : off
@@ -10,6 +11,8 @@ rules:
   owasp:api4:2023-rate-limit-responses-429 : off
   owasp:api8:2023-define-cors-origin : off
   owasp:api8:2023-define-error-responses-500 : off
-  owasp:api8:2023-define-error-responses-401 : error 
   owasp:api9:2023-inventory-access : off
   owasp:api9:2023-inventory-environment : off
+
+# modified severity level:
+  owasp:api8:2023-define-error-responses-401 : error 

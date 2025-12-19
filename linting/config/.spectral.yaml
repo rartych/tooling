@@ -314,6 +314,7 @@ rules:
   camara-request-body-description-inline:
     description: "Inline requestBody objects MUST include a non-empty description."
     message: "Inline requestBody MUST include a non-empty `description`."
+    severity: error
     given: "$..requestBody[?(!@.$ref)]"
     then:
       field: description
@@ -322,6 +323,7 @@ rules:
   camara-components-requestbody-description:
     description: "Re-usable requestBodies in components.requestBodies MUST include a non-empty description."
     message: "Each entry in `components.requestBodies` MUST include a non-empty `description`."
+    severity: error
     given: "$.components.requestBodies.*"
     then:
       field: description

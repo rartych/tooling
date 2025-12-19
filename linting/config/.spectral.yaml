@@ -334,7 +334,7 @@ rules:
   camara-no-description-on-schemas-referenced-by-requestBody:
     description: "Schemas referenced from Request Body $ref must NOT contain a description (move description to the requestBody)."
     message: "Schema '{{schema}}' is referenced from a requestBody and must not include a `description` property; move the description into the requestBody instead."
-    given: "$"                     # run at document root; the function inspects whole document
+    given: "$..requestBody"
     then:
       function: no-description-on-requestbody-ref
       functionOptions: {}

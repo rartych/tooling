@@ -9,6 +9,7 @@
 # - 25.07.2025: Added camara-schema-type-check rule
 
 # - 19.12.2025: Added array and requestBody description rules
+# - 19.12.2025: function no-description-on-requestbody-ref added
 
 
 extends: "spectral:oas"
@@ -16,6 +17,7 @@ functions:
   - camara-reserved-words
   - camara-language-avoid-telco
   - camara-security-no-secrets-in-path-or-query-parameters
+  - no-description-on-requestbody-ref
 functionsDir: "./lint_function"
 rules:
   #  Built-in OpenAPI Specification ruleset. Each rule then can be enabled individually.
@@ -328,3 +330,11 @@ rules:
     then:
       field: description
       function: truthy
+
+  camara-no-description-on-schemas-referenced-by-requestBody:
+    description: "Schemas referenced from Request Body $ref must NOT contain a description (move description to the requestBody)."
+    message: "Schema '{{schema}}' is referenced from a requestBody and must not include a `description` property; move the description into the requestBody instead."
+    given: "$"                     # run at document root; the function inspects whole document
+    then:
+      function: no-description-on-requestbody-ref
+      functionOptions: {}

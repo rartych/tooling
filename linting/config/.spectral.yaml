@@ -8,6 +8,8 @@
 # - 03.06.2025: renamed to: .spectral.yaml
 # - 25.07.2025: Added camara-schema-type-check rule
 
+# - 19.12.2025: Added array description rules
+
 
 extends: "spectral:oas"
 functions:
@@ -280,3 +282,32 @@ rules:
       functionOptions:
         match: "^(string|number|integer|boolean|array|object)$"
     recommended: true
+
+  camara-array-items-description:
+    description: "When a response schema or field is an array, the items object MUST include a non-empty 'description' property."
+    message: "Array schema items must include a non-empty 'description' property."
+    severity: error
+    given: "$..[?(@.type=='array')]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: ["items"]
+          properties:
+            items:
+              type: object
+              required: ["description"]
+              properties:
+                description:
+                  type: string
+                  minLength: 1
+
+  camara-array-no-top-level-description:
+    description: "Array schemas MUST NOT include a top-level 'description' property; descriptions must be placed on the 'items' object."
+    message: "Array schema must not have a top-level 'description'; move the description to the 'items' object."
+    severity: error
+    given: "$..[?(@.type=='array')].description"
+    then:
+      function: falsy
+

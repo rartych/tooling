@@ -1,0 +1,48 @@
+name: validate-release-plan
+description: |
+  Validates release-plan.yaml files against the CAMARA release plan schema.
+  Stub action - full implementation pending.
+
+inputs:
+  release_plan_path:
+    description: 'Path to the release-plan.yaml file'
+    required: true
+    default: 'release-plan.yaml'
+  schema_path:
+    description: 'Path to schema file (optional, uses bundled schema if not specified)'
+    required: false
+  check_files:
+    description: 'Check if referenced API files exist'
+    required: false
+    default: 'false'
+
+outputs:
+  valid:
+    description: 'Whether valid (true/false)'
+    value: ${{ steps.stub.outputs.valid }}
+  errors:
+    description: 'JSON array of errors'
+    value: ${{ steps.stub.outputs.errors }}
+  warnings:
+    description: 'JSON array of warnings'
+    value: ${{ steps.stub.outputs.warnings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Stub - Not Yet Implemented
+      shell: bash
+      run: |
+        echo "::notice::validate-release-plan action is a stub - full implementation pending"
+        echo "Input file: ${{ inputs.release_plan_path }}"
+        echo ""
+        echo "For direct validation, use the Python script:"
+        echo "  python3 validation/scripts/validate-release-plan.py ${{ inputs.release_plan_path }}"
+
+    - name: Set outputs
+      id: stub
+      shell: bash
+      run: |
+        echo "valid=true" >> $GITHUB_OUTPUT
+        echo "errors=[]" >> $GITHUB_OUTPUT
+        echo "warnings=[\"Action is a stub - run validate-release-plan.py directly\"]" >> $GITHUB_OUTPUT

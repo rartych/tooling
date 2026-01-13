@@ -58,6 +58,7 @@ jobs:
       # This ensures validation errors from rule changes don't mix with code changes
 
       - name: Check exclusivity
+        id: exclusivity
         if: steps.changes.outputs.release_plan_any_changed == 'true'
         run: |
           if [[ "${{ steps.changes.outputs.other_any_changed }}" == "true" ]]; then
@@ -86,7 +87,7 @@ jobs:
           check_files: 'true'
 
       - name: Report validation status
-        if: steps.changes.outputs.release_plan_any_changed == 'true'
+        if: always() && steps.changes.outputs.release_plan_any_changed == 'true' && steps.exclusivity.outcome != 'failure'
         uses: actions/github-script@v7
         with:
           script: |
@@ -123,8 +124,27 @@ jobs:
 
               core.setFailed('Release plan validation failed');
             } else {
-              core.notice('Validation passed', {file: 'release-plan.yaml'});
-              core.summary.addHeading('Release Plan Validation Passed', 2);
+              // Check for warnings even when validation passed
+              const warningsStr = `${{ steps.validate.outputs.warnings }}`;
+              let warnings = [];
+              try {
+                warnings = JSON.parse(warningsStr || '[]');
+              } catch (e) {
+                if (warningsStr && warningsStr.trim()) {
+                  warnings = [warningsStr];
+                }
+              }
+
+              if (warnings.length > 0) {
+                for (const warn of warnings) {
+                  core.warning(warn, {file: 'release-plan.yaml'});
+                }
+                core.summary.addHeading('Release Plan Validation Passed with Warnings', 2);
+                core.summary.addList(warnings);
+              } else {
+                core.notice('Validation passed', {file: 'release-plan.yaml'});
+                core.summary.addHeading('Release Plan Validation Passed', 2);
+              }
               await core.summary.write();
             }
 
@@ -133,10 +153,13 @@ jobs:
         run: echo "::notice::release-plan.yaml not modified, skipping validation"
 
       # ==================== MegaLinter ====================
-      # Always runs (after validation if release-plan.yaml changed)
-      # If release-plan.yaml changed, MegaLinter uses new rules from it
+      # Runs when:
+      # - release-plan.yaml was NOT changed, OR
+      # - release-plan.yaml was changed AND validation passed
+      # Skipped when release-plan.yaml validation fails (no point linting with invalid rules)
 
       - name: Checkout linting config
+        if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
         uses: actions/checkout@v4
         with:
           repository: camaraproject/tooling
@@ -148,11 +171,13 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Copy config to workspace
+        if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
         # --strip-trailing-slashes removes any trailing slashes from each SOURCE argument (when ${{ inputs.configurations }} is empty)
         run: cp -RT --strip-trailing-slashes ${{ github.workspace }}/lint-config/linting/config/${{ inputs.configurations }} ${{ github.workspace }}
 
       - name: MegaLinter
         id: ml
+        if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
         # You can override MegaLinter flavor used to have faster performances
         # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters - can be upgraded to v8
         uses: oxsecurity/megalinter/flavors/c_cpp@v7
@@ -174,7 +199,7 @@ jobs:
           GHERKIN_GHERKIN_LINT_FILTER_REGEX_INCLUDE: (code/Test_definitions/)
 
       - name: Archive reports
-        if: success() || failure()
+        if: (success() || failure()) && steps.ml.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: MegaLinter reports

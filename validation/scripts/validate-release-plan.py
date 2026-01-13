@@ -6,17 +6,20 @@ Validates release-plan.yaml and release-metadata.yaml files against their
 respective JSON schemas. Performs basic schema validation and semantic checks.
 
 Usage:
-    python3 validate-release-plan.py <metadata-file> [--schema <schema-file>] [--check-files]
+    python3 validate-release-plan.py <metadata-file> --type <type> [--schema <schema-file>] [--check-files]
 
 Examples:
-    # Validate release plan with auto-detected schema
-    python3 validate-release-plan.py release-plan.yaml
+    # Validate release plan with explicit type (recommended)
+    python3 validate-release-plan.py release-plan.yaml --type release-plan
+
+    # Validate release metadata
+    python3 validate-release-plan.py release-metadata.yaml --type release-metadata
 
     # Validate with explicit schema
-    python3 validate-release-plan.py release-plan.yaml --schema ../schemas/release-plan-schema.yaml
+    python3 validate-release-plan.py release-plan.yaml --type release-plan --schema ../schemas/release-plan-schema.yaml
 
     # Validate with file existence checks
-    python3 validate-release-plan.py release-plan.yaml --check-files
+    python3 validate-release-plan.py release-plan.yaml --type release-plan --check-files
 """
 
 import argparse
@@ -43,11 +46,13 @@ class MetadataValidator:
     """Validator for CAMARA release metadata files."""
 
     def __init__(self, metadata_file: Path, schema_file: Optional[Path] = None,
-                 check_files: bool = False, strict_phase1: bool = False):
+                 check_files: bool = False, strict_phase1: bool = False,
+                 metadata_type: Optional[str] = None):
         self.metadata_file = metadata_file
         self.schema_file = schema_file
         self.check_files = check_files
         self.strict_phase1 = strict_phase1
+        self.metadata_type = metadata_type
         self.errors: List[str] = []
         self.warnings: List[str] = []
 
@@ -256,15 +261,24 @@ class MetadataValidator:
         if self.errors:
             return False
 
-        # Detect schema type
-        schema_type = self.detect_schema_type(metadata)
-        if schema_type == 'unknown':
-            self.errors.append(
-                "Cannot determine metadata type (release-plan or release-metadata)"
-            )
-            return False
-
-        print(f"Detected metadata type: {schema_type}")
+        # Determine schema type: explicit > auto-detect with warning
+        if self.metadata_type:
+            schema_type = self.metadata_type
+            print(f"Using explicit metadata type: {schema_type}")
+        else:
+            # Auto-detection with deprecation warning
+            schema_type = self.detect_schema_type(metadata)
+            if schema_type != 'unknown':
+                print(f"DEPRECATION WARNING: Auto-detection will be removed in a future version.",
+                      file=sys.stderr)
+                print(f"Use --type {schema_type} for explicit type specification.", file=sys.stderr)
+                print(f"Detected metadata type: {schema_type}")
+            else:
+                self.errors.append(
+                    "Cannot determine metadata type. Use --type argument to specify "
+                    "'release-plan' or 'release-metadata'."
+                )
+                return False
 
         # Find or use provided schema file
         if not self.schema_file:
@@ -338,6 +352,11 @@ def main():
         action='store_true',
         help='Enforce null values for release_date and src_commit_sha (Phase 1 validation for release branch PRs)'
     )
+    parser.add_argument(
+        '--type',
+        choices=['release-plan', 'release-metadata'],
+        help='Metadata type to validate (recommended; auto-detection is deprecated)'
+    )
 
     args = parser.parse_args()
 
@@ -349,7 +368,8 @@ def main():
         args.metadata_file,
         args.schema,
         args.check_files,
-        args.strict_phase1
+        args.strict_phase1,
+        args.type
     )
 
     success = validator.validate()

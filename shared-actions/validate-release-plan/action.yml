@@ -1,7 +1,7 @@
 name: validate-release-plan
 description: |
   Validates release-plan.yaml files against the CAMARA release plan schema.
-  Stub action - full implementation pending.
+  Performs schema validation and semantic checks (API status consistency, etc.).
 
 inputs:
   release_plan_path:
@@ -18,31 +18,86 @@ inputs:
 
 outputs:
   valid:
-    description: 'Whether valid (true/false)'
-    value: ${{ steps.stub.outputs.valid }}
+    description: 'Whether validation passed (true/false)'
+    value: ${{ steps.validate.outputs.valid }}
   errors:
-    description: 'JSON array of errors'
-    value: ${{ steps.stub.outputs.errors }}
+    description: 'JSON array of error messages'
+    value: ${{ steps.validate.outputs.errors }}
   warnings:
-    description: 'JSON array of warnings'
-    value: ${{ steps.stub.outputs.warnings }}
+    description: 'JSON array of warning messages'
+    value: ${{ steps.validate.outputs.warnings }}
 
 runs:
   using: composite
   steps:
-    - name: Stub - Not Yet Implemented
-      shell: bash
-      run: |
-        echo "::notice::validate-release-plan action is a stub - full implementation pending"
-        echo "Input file: ${{ inputs.release_plan_path }}"
-        echo ""
-        echo "For direct validation, use the Python script:"
-        echo "  python3 validation/scripts/validate-release-plan.py ${{ inputs.release_plan_path }}"
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-    - name: Set outputs
-      id: stub
+    - name: Install dependencies
+      shell: bash
+      run: pip install --quiet pyyaml jsonschema
+
+    - name: Run validation
+      id: validate
       shell: bash
       run: |
-        echo "valid=true" >> $GITHUB_OUTPUT
-        echo "errors=[]" >> $GITHUB_OUTPUT
-        echo "warnings=[\"Action is a stub - run validate-release-plan.py directly\"]" >> $GITHUB_OUTPUT
+        set +e  # Don't exit on error - capture exit code
+
+        SCRIPT_PATH="${{ github.action_path }}/../../validation/scripts/validate-release-plan.py"
+
+        # Build command arguments
+        ARGS="${{ inputs.release_plan_path }}"
+        ARGS="$ARGS --type release-plan"
+
+        if [[ -n "${{ inputs.schema_path }}" ]]; then
+          ARGS="$ARGS --schema ${{ inputs.schema_path }}"
+        fi
+
+        if [[ "${{ inputs.check_files }}" == "true" ]]; then
+          ARGS="$ARGS --check-files"
+        fi
+
+        echo "Running: python3 $SCRIPT_PATH $ARGS"
+
+        # Run validation and capture output
+        OUTPUT=$(python3 "$SCRIPT_PATH" $ARGS 2>&1)
+        EXIT_CODE=$?
+
+        echo "$OUTPUT"
+
+        # Parse output for errors and warnings
+        # Extract lines containing "ERROR:" and "WARNING:"
+        ERRORS=$(echo "$OUTPUT" | grep "ERROR:" | sed 's/^.*ERROR: //' | jq -R -s 'split("\n") | map(select(length > 0))')
+        WARNINGS=$(echo "$OUTPUT" | grep "WARNING:" | sed 's/^.*WARNING: //' | jq -R -s 'split("\n") | map(select(length > 0))')
+
+        # Default to empty arrays if no matches
+        if [[ -z "$ERRORS" ]]; then
+          ERRORS="[]"
+        fi
+        if [[ -z "$WARNINGS" ]]; then
+          WARNINGS="[]"
+        fi
+
+        # Set outputs
+        if [[ $EXIT_CODE -eq 0 ]]; then
+          echo "valid=true" >> $GITHUB_OUTPUT
+        else
+          echo "valid=false" >> $GITHUB_OUTPUT
+        fi
+
+        # Use heredoc for JSON arrays to handle special characters
+        {
+          echo 'errors<<ERRORS_EOF'
+          echo "$ERRORS"
+          echo 'ERRORS_EOF'
+        } >> $GITHUB_OUTPUT
+
+        {
+          echo 'warnings<<WARNINGS_EOF'
+          echo "$WARNINGS"
+          echo 'WARNINGS_EOF'
+        } >> $GITHUB_OUTPUT
+
+        exit $EXIT_CODE

@@ -92,6 +92,28 @@ jobs:
         with:
           script: |
             const valid = '${{ steps.validate.outputs.valid }}' === 'true';
+            const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+
+            // Parse warnings first (needed for status description)
+            const warningsStr = `${{ steps.validate.outputs.warnings }}`;
+            let warnings = [];
+            try {
+              warnings = JSON.parse(warningsStr || '[]');
+            } catch (e) {
+              if (warningsStr && warningsStr.trim()) {
+                warnings = [warningsStr];
+              }
+            }
+
+            // Determine status description
+            let description;
+            if (!valid) {
+              description = 'Validation failed';
+            } else if (warnings.length > 0) {
+              description = 'Validation passed with warnings';
+            } else {
+              description = 'Validation passed';
+            }
 
             // Create separate check status (visible in PR checks list)
             await github.rest.repos.createCommitStatus({
@@ -100,7 +122,8 @@ jobs:
               sha: context.sha,
               state: valid ? 'success' : 'failure',
               context: '--> Validate: release-plan.yaml',
-              description: valid ? 'Validation passed' : 'Validation failed'
+              description: description,
+              target_url: runUrl
             });
 
             if (!valid) {
@@ -124,17 +147,6 @@ jobs:
 
               core.setFailed('Release plan validation failed');
             } else {
-              // Check for warnings even when validation passed
-              const warningsStr = `${{ steps.validate.outputs.warnings }}`;
-              let warnings = [];
-              try {
-                warnings = JSON.parse(warningsStr || '[]');
-              } catch (e) {
-                if (warningsStr && warningsStr.trim()) {
-                  warnings = [warningsStr];
-                }
-              }
-
               if (warnings.length > 0) {
                 for (const warn of warnings) {
                   core.warning(warn, {file: 'release-plan.yaml'});

@@ -31,7 +31,7 @@ except ImportError:
 
 try:
     import jsonschema
-    from jsonschema import validate, ValidationError
+    from jsonschema import Draft7Validator, ValidationError
 except ImportError:
     print("Error: jsonschema package is required. Install with: pip install jsonschema")
     sys.exit(1)
@@ -71,16 +71,20 @@ class ReleasePlanValidator:
         return None
 
     def validate_schema(self, release_plan: Dict[str, Any], schema: Dict[str, Any]) -> bool:
-        """Validate release plan against JSON schema."""
-        try:
-            validate(instance=release_plan, schema=schema)
-            return True
-        except ValidationError as e:
-            self.errors.append(f"Schema validation error: {e.message}")
-            if e.path:
-                path_str = '.'.join(str(p) for p in e.path)
-                self.errors.append(f"  at path: {path_str}")
-            return False
+        """Validate release plan against JSON schema. Collects all errors."""
+        validator = Draft7Validator(schema)
+        errors_found = False
+
+        for error in validator.iter_errors(release_plan):
+            errors_found = True
+            # Combine message and path into single error line
+            if error.path:
+                path_str = '.'.join(str(p) for p in error.path)
+                self.errors.append(f"Schema validation error at '{path_str}': {error.message}")
+            else:
+                self.errors.append(f"Schema validation error: {error.message}")
+
+        return not errors_found
 
     def check_semantic_rules(self, release_plan: Dict[str, Any]) -> None:
         """Check semantic rules beyond schema validation."""
@@ -216,12 +220,13 @@ class ReleasePlanValidator:
         if self.errors:
             return False
 
-        # Validate against schema
-        if not self.validate_schema(release_plan, schema):
-            return False
+        # Validate against schema (collects all schema errors)
+        schema_valid = self.validate_schema(release_plan, schema)
 
-        # Run semantic checks
-        self.check_semantic_rules(release_plan)
+        # Run semantic checks even if schema has errors (collect all issues)
+        # But only if the basic structure is valid enough to check semantics
+        if schema_valid or release_plan.get('repository') and release_plan.get('apis'):
+            self.check_semantic_rules(release_plan)
 
         # Check file existence if requested
         self.check_file_existence(release_plan)

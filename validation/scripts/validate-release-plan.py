@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 """
-CAMARA Release Metadata Validator
+CAMARA Release Plan Validator
 
-Validates release-plan.yaml and release-metadata.yaml files against their
-respective JSON schemas. Performs basic schema validation and semantic checks.
+Validates release-plan.yaml files against JSON schema and semantic rules.
 
 Usage:
-    python3 validate-release-plan.py <metadata-file> --type <type> [--schema <schema-file>] [--check-files]
+    python3 validate-release-plan.py <release-plan-file> [--schema <schema-file>] [--check-files]
 
 Examples:
-    # Validate release plan with explicit type (recommended)
-    python3 validate-release-plan.py release-plan.yaml --type release-plan
-
-    # Validate release metadata
-    python3 validate-release-plan.py release-metadata.yaml --type release-metadata
+    # Basic validation
+    python3 validate-release-plan.py release-plan.yaml
 
     # Validate with explicit schema
-    python3 validate-release-plan.py release-plan.yaml --type release-plan --schema ../schemas/release-plan-schema.yaml
+    python3 validate-release-plan.py release-plan.yaml --schema ../schemas/release-plan-schema.yaml
 
     # Validate with file existence checks
-    python3 validate-release-plan.py release-plan.yaml --type release-plan --check-files
+    python3 validate-release-plan.py release-plan.yaml --check-files
 """
 
 import argparse
 import sys
-import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -42,17 +37,14 @@ except ImportError:
     sys.exit(1)
 
 
-class MetadataValidator:
-    """Validator for CAMARA release metadata files."""
+class ReleasePlanValidator:
+    """Validator for CAMARA release-plan.yaml files."""
 
-    def __init__(self, metadata_file: Path, schema_file: Optional[Path] = None,
-                 check_files: bool = False, strict_phase1: bool = False,
-                 metadata_type: Optional[str] = None):
-        self.metadata_file = metadata_file
+    def __init__(self, release_plan_file: Path, schema_file: Optional[Path] = None,
+                 check_files: bool = False):
+        self.release_plan_file = release_plan_file
         self.schema_file = schema_file
         self.check_files = check_files
-        self.strict_phase1 = strict_phase1
-        self.metadata_type = metadata_type
         self.errors: List[str] = []
         self.warnings: List[str] = []
 
@@ -68,41 +60,20 @@ class MetadataValidator:
             self.errors.append(f"File not found: {file_path}")
             return {}
 
-    def detect_schema_type(self, metadata: Dict[str, Any]) -> str:
-        """Detect whether this is a release-plan or release-metadata file."""
-        if not metadata.get('repository'):
-            return 'unknown'
-
-        repo = metadata['repository']
-        # release-metadata has release_date and src_commit_sha
-        if 'release_date' in repo and 'src_commit_sha' in repo:
-            return 'release-metadata'
-        # release-plan has target_release_type
-        elif 'target_release_type' in repo:
-            return 'release-plan'
-
-        return 'unknown'
-
-    def find_schema_file(self, schema_type: str) -> Optional[Path]:
+    def find_schema_file(self) -> Optional[Path]:
         """Find schema file relative to script location."""
         script_dir = Path(__file__).parent
         schema_dir = script_dir.parent / 'schemas'
-
-        if schema_type == 'release-plan':
-            schema_file = schema_dir / 'release-plan-schema.yaml'
-        elif schema_type == 'release-metadata':
-            schema_file = schema_dir / 'release-metadata-schema.yaml'
-        else:
-            return None
+        schema_file = schema_dir / 'release-plan-schema.yaml'
 
         if schema_file.exists():
             return schema_file
         return None
 
-    def validate_schema(self, metadata: Dict[str, Any], schema: Dict[str, Any]) -> bool:
-        """Validate metadata against JSON schema."""
+    def validate_schema(self, release_plan: Dict[str, Any], schema: Dict[str, Any]) -> bool:
+        """Validate release plan against JSON schema."""
         try:
-            validate(instance=metadata, schema=schema)
+            validate(instance=release_plan, schema=schema)
             return True
         except ValidationError as e:
             self.errors.append(f"Schema validation error: {e.message}")
@@ -111,10 +82,10 @@ class MetadataValidator:
                 self.errors.append(f"  at path: {path_str}")
             return False
 
-    def check_semantic_rules(self, metadata: Dict[str, Any], schema_type: str) -> None:
+    def check_semantic_rules(self, release_plan: Dict[str, Any]) -> None:
         """Check semantic rules beyond schema validation."""
-        repo = metadata.get('repository', {})
-        apis = metadata.get('apis', [])
+        repo = release_plan.get('repository', {})
+        apis = release_plan.get('apis', [])
 
         # Check release_track and meta_release consistency
         release_track = repo.get('release_track')
@@ -129,10 +100,6 @@ class MetadataValidator:
         # Check API status progression
         for api in apis:
             self._check_api_status(api)
-
-        # Check two-phase workflow for release-metadata
-        if schema_type == 'release-metadata':
-            self._check_two_phase_workflow(repo)
 
     def _check_track_consistency(self, release_track: Optional[str], meta_release: Optional[str]) -> None:
         """Check that release_track and meta_release are consistent."""
@@ -205,39 +172,13 @@ class MetadataValidator:
         # - Status progression rules
         pass
 
-    def _check_two_phase_workflow(self, repo: Dict) -> None:
-        """Check two-phase workflow rules for release-metadata.
-
-        Two-phase workflow:
-        - Phase 1 (preparation): release_date and src_commit_sha MUST be null
-        - Phase 2 (finalized): release_date and src_commit_sha MUST be valid strings
-
-        The --strict-phase1 flag enforces null values for Phase 1 validation.
-        Without this flag, both null and valid values are accepted (lenient mode).
-        """
-        release_date = repo.get('release_date')
-        src_commit_sha = repo.get('src_commit_sha')
-
-        # Strict Phase 1 validation (for CI during release branch PR review)
-        if self.strict_phase1:
-            if release_date is not None:
-                self.errors.append(
-                    "Phase 1 validation: release_date must be null during release preparation"
-                )
-            if src_commit_sha is not None:
-                self.errors.append(
-                    "Phase 1 validation: src_commit_sha must be null during release preparation"
-                )
-        # Lenient mode: Allow both null (Phase 1) and valid strings (Phase 2)
-        # Schema validation already ensures format is correct when not null
-
-    def check_file_existence(self, metadata: Dict[str, Any]) -> None:
+    def check_file_existence(self, release_plan: Dict[str, Any]) -> None:
         """Check if referenced API files exist (optional check)."""
         if not self.check_files:
             return
 
-        apis = metadata.get('apis', [])
-        metadata_dir = self.metadata_file.parent
+        apis = release_plan.get('apis', [])
+        release_plan_dir = self.release_plan_file.parent
 
         for api in apis:
             api_name = api.get('api_name')
@@ -248,7 +189,7 @@ class MetadataValidator:
                 continue
 
             # Look for API definition file
-            api_file = metadata_dir / 'code' / 'API_definitions' / f'{api_name}.yaml'
+            api_file = release_plan_dir / 'code' / 'API_definitions' / f'{api_name}.yaml'
             if not api_file.exists():
                 self.warnings.append(
                     f"API definition file not found: {api_file} (status: {target_api_status})"
@@ -256,37 +197,16 @@ class MetadataValidator:
 
     def validate(self) -> bool:
         """Run full validation and return success status."""
-        # Load metadata file
-        metadata = self.load_yaml(self.metadata_file)
+        # Load release plan file
+        release_plan = self.load_yaml(self.release_plan_file)
         if self.errors:
             return False
 
-        # Determine schema type: explicit > auto-detect with warning
-        if self.metadata_type:
-            schema_type = self.metadata_type
-            print(f"Using explicit metadata type: {schema_type}")
-        else:
-            # Auto-detection with deprecation warning
-            schema_type = self.detect_schema_type(metadata)
-            if schema_type != 'unknown':
-                print(f"DEPRECATION WARNING: Auto-detection will be removed in a future version.",
-                      file=sys.stderr)
-                print(f"Use --type {schema_type} for explicit type specification.", file=sys.stderr)
-                print(f"Detected metadata type: {schema_type}")
-            else:
-                self.errors.append(
-                    "Cannot determine metadata type. Use --type argument to specify "
-                    "'release-plan' or 'release-metadata'."
-                )
-                return False
-
         # Find or use provided schema file
         if not self.schema_file:
-            self.schema_file = self.find_schema_file(schema_type)
+            self.schema_file = self.find_schema_file()
             if not self.schema_file:
-                self.errors.append(
-                    f"Cannot find schema file for type '{schema_type}'"
-                )
+                self.errors.append("Cannot find release-plan-schema.yaml")
                 return False
 
         print(f"Using schema: {self.schema_file}")
@@ -297,14 +217,14 @@ class MetadataValidator:
             return False
 
         # Validate against schema
-        if not self.validate_schema(metadata, schema):
+        if not self.validate_schema(release_plan, schema):
             return False
 
         # Run semantic checks
-        self.check_semantic_rules(metadata, schema_type)
+        self.check_semantic_rules(release_plan)
 
         # Check file existence if requested
-        self.check_file_existence(metadata)
+        self.check_file_existence(release_plan)
 
         return len(self.errors) == 0
 
@@ -328,48 +248,36 @@ class MetadataValidator:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Validate CAMARA release metadata files',
+        description='Validate CAMARA release-plan.yaml files',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
     parser.add_argument(
-        'metadata_file',
+        'release_plan_file',
         type=Path,
-        help='Path to release-plan.yaml or release-metadata.yaml file'
+        help='Path to release-plan.yaml file'
     )
     parser.add_argument(
         '--schema',
         type=Path,
-        help='Path to schema file (auto-detected if not provided)'
+        help='Path to schema file (uses bundled schema if not provided)'
     )
     parser.add_argument(
         '--check-files',
         action='store_true',
         help='Check if referenced API definition files exist'
     )
-    parser.add_argument(
-        '--strict-phase1',
-        action='store_true',
-        help='Enforce null values for release_date and src_commit_sha (Phase 1 validation for release branch PRs)'
-    )
-    parser.add_argument(
-        '--type',
-        choices=['release-plan', 'release-metadata'],
-        help='Metadata type to validate (recommended; auto-detection is deprecated)'
-    )
 
     args = parser.parse_args()
 
-    if not args.metadata_file.exists():
-        print(f"Error: Metadata file not found: {args.metadata_file}")
+    if not args.release_plan_file.exists():
+        print(f"Error: Release plan file not found: {args.release_plan_file}")
         sys.exit(1)
 
-    validator = MetadataValidator(
-        args.metadata_file,
+    validator = ReleasePlanValidator(
+        args.release_plan_file,
         args.schema,
-        args.check_files,
-        args.strict_phase1,
-        args.type
+        args.check_files
     )
 
     success = validator.validate()

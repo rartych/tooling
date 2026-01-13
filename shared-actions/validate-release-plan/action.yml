@@ -49,7 +49,6 @@ runs:
 
         # Build command arguments
         ARGS="${{ inputs.release_plan_path }}"
-        ARGS="$ARGS --type release-plan"
 
         if [[ -n "${{ inputs.schema_path }}" ]]; then
           ARGS="$ARGS --schema ${{ inputs.schema_path }}"

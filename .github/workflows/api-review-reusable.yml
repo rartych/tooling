@@ -122,14 +122,14 @@ jobs:
           echo "Validator: ${{ needs.validate-commonalities-version.outputs.validator_script }}"
 
       - name: Checkout Workflow Repository (Tooling)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.tooling_repository }}
           path: review-tools
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout Target Repository PR
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.pr_head_repo }}
           ref: ${{ inputs.pr_head_sha }}

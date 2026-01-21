@@ -1,12 +1,16 @@
 # =========================================================================================
 # CAMARA Project - Pull Request Validation Workflow
 #
-# This GitHub Actions is a reusable workflow for validating PRs using tools configuration 
+# This GitHub Actions is a reusable workflow for validating PRs using tools configuration
 # from subfolder indicated by input `configurations` variable.
-# It calls Megalinter tool with the set of configuration variables in "env". 
+#
+# Validation includes:
+# - release-plan.yaml validation (if changed, must be exclusive - no other changes)
+# - MegaLinter for API definitions and test files
 #
 # CHANGELOG:
 # - 2025-08-01: Initial version for v0
+# - 2026-01-13: Added release-plan.yaml validation with exclusivity check
 #
 # USAGE:
 # The action is invoked by Pull Request Validation Workflow Caller in CAMARA API repositories
@@ -17,10 +21,8 @@
 
 name: PR validation for CAMARA Project
 
-
 on:
   workflow_call:
-    # For a workflow to be reusable, the values for on must include workflow_call
     inputs:
       configurations:
         description: Subfolder containing tool configs to be used
@@ -29,17 +31,146 @@ on:
         default: ""
 
 jobs:
-  general:
-    name: MegaLinter
+  pr-validation:
+    name: PR Validation
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: changes
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
+        with:
+          files_yaml: |
+            release_plan:
+              - release-plan.yaml
+            other:
+              - '**'
+              - '!release-plan.yaml'
+
+      # ==================== release-plan.yaml Validation ====================
+      # If release-plan.yaml changed, it must be the ONLY change in the PR
+      # This ensures validation errors from rule changes don't mix with code changes
+
+      - name: Check exclusivity
+        id: exclusivity
+        if: steps.changes.outputs.release_plan_any_changed == 'true'
+        run: |
+          if [[ "${{ steps.changes.outputs.other_any_changed }}" == "true" ]]; then
+            echo "::error::release-plan.yaml must be changed in a separate PR"
+            echo "## Exclusivity Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "release-plan.yaml changes must be in a **separate PR** from other changes." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Reason:** If release-plan.yaml changes validation rules (e.g., alpha to rc)," >> $GITHUB_STEP_SUMMARY
+            echo "any new errors should be clearly attributable to the rule change, not mixed with code changes." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Please:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Remove release-plan.yaml changes from this PR" >> $GITHUB_STEP_SUMMARY
+            echo "2. Create a separate PR for release-plan.yaml updates" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Validate release-plan.yaml
+        if: steps.changes.outputs.release_plan_any_changed == 'true'
+        id: validate
+        uses: camaraproject/tooling/shared-actions/validate-release-plan@v0
+        with:
+          release_plan_path: release-plan.yaml
+          check_files: 'true'
+
+      - name: Report validation status
+        if: always() && steps.changes.outputs.release_plan_any_changed == 'true' && steps.exclusivity.outcome != 'failure'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v8
+        with:
+          script: |
+            const valid = '${{ steps.validate.outputs.valid }}' === 'true';
+            const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+
+            // Parse warnings first (needed for status description)
+            const warningsStr = `${{ steps.validate.outputs.warnings }}`;
+            let warnings = [];
+            try {
+              warnings = JSON.parse(warningsStr || '[]');
+            } catch (e) {
+              if (warningsStr && warningsStr.trim()) {
+                warnings = [warningsStr];
+              }
+            }
+
+            // Determine status description
+            let description;
+            if (!valid) {
+              description = 'Validation failed';
+            } else if (warnings.length > 0) {
+              description = 'Validation passed with warnings';
+            } else {
+              description = 'Validation passed';
+            }
+
+            // Create separate check status (visible in PR checks list)
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: valid ? 'success' : 'failure',
+              context: '--> Validate: release-plan.yaml',
+              description: description,
+              target_url: runUrl
+            });
+
+            if (!valid) {
+              // Output errors as annotations
+              const errorsStr = `${{ steps.validate.outputs.errors }}`;
+              let errors = [];
+              try {
+                errors = JSON.parse(errorsStr || '[]');
+              } catch (e) {
+                errors = [errorsStr];
+              }
+
+              for (const err of errors) {
+                core.error(err, {file: 'release-plan.yaml'});
+              }
+
+              // Job summary
+              core.summary.addHeading('Release Plan Validation Failed', 2);
+              core.summary.addList(errors);
+              await core.summary.write();
+
+              core.setFailed('Release plan validation failed');
+            } else {
+              if (warnings.length > 0) {
+                for (const warn of warnings) {
+                  core.warning(warn, {file: 'release-plan.yaml'});
+                }
+                core.summary.addHeading('Release Plan Validation Passed with Warnings', 2);
+                core.summary.addList(warnings);
+              } else {
+                core.notice('Validation passed', {file: 'release-plan.yaml'});
+                core.summary.addHeading('Release Plan Validation Passed', 2);
+              }
+              await core.summary.write();
+            }
+
+      - name: Skip validation (no release-plan changes)
+        if: steps.changes.outputs.release_plan_any_changed != 'true'
+        run: echo "::notice::release-plan.yaml not modified, skipping validation"
+
+      # ==================== MegaLinter ====================
+      # Runs when:
+      # - release-plan.yaml was NOT changed, OR
+      # - release-plan.yaml was changed AND validation passed
+      # Skipped when release-plan.yaml validation fails (no point linting with invalid rules)
+
       - name: Checkout linting config
-        uses: actions/checkout@v4
+        if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v5
         with:
           repository: camaraproject/tooling
           path: lint-config
@@ -48,11 +179,15 @@ jobs:
           sparse-checkout: |
             linting/config/
           sparse-checkout-cone-mode: false
-      - name: Copy specified folder to workspace root
-        # --strip-trailing-slashes remove any trailing slashes from each SOURCE argument - when ${{ inputs.configurations }} is empty
+
+      - name: Copy config to workspace
+        if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
+        # --strip-trailing-slashes removes any trailing slashes from each SOURCE argument (when ${{ inputs.configurations }} is empty)
         run: cp -RT --strip-trailing-slashes ${{ github.workspace }}/lint-config/linting/config/${{ inputs.configurations }} ${{ github.workspace }}
+
       - name: MegaLinter
         id: ml
+        if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
         # You can override MegaLinter flavor used to have faster performances
         # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters - can be upgraded to v8
         uses: oxsecurity/megalinter/flavors/c_cpp@v7
@@ -72,50 +207,13 @@ jobs:
           API_SPECTRAL_FILTER_REGEX_INCLUDE: (code/API_definitions/)
           YAML_YAMLLINT_FILTER_REGEX_INCLUDE: (code/API_definitions/)
           GHERKIN_GHERKIN_LINT_FILTER_REGEX_INCLUDE: (code/Test_definitions/)
-      - name: Archive production artifacts
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
+
+      - name: Archive reports
+        if: (success() || failure()) && steps.ml.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: MegaLinter reports
           include-hidden-files: "true"
           path: |
             megalinter-reports
             mega-linter.log
-
-#  # Job that runs only when changelog is updated - tbd
-#   changelog-changed-job:
-#     runs-on: ubuntu-latest
-    
-#     steps:
-#     - name: Checkout repository
-#       uses: actions/checkout@v4
-#       with:
-#         fetch-depth: 2
-    
-#     - name: Check if changelog was updated
-#       id: changelog-changed
-#       uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46 
-#       with:
-#         files: |
-#           CHANGELOG.MD
-#           CHANGELOG.md
-    
-#     - name: Custom job logic
-#       if: steps.changelog-changed.outputs.any_changed == 'true'
-#       run: |
-#         echo "🚀 Changelog was updated! Running custom job..."
-        
-#         # Add your custom logic here
-#         echo "Performing custom actions:"
-#         echo "✅ Step 1: Custom processing"
-#         echo "✅ Step 2: Your business logic"
-#         echo "✅ Step 3: Additional operations"
-        
-#         # Example: Parse changelog for latest entry
-#         echo "Latest changelog entry:"
-#         head -20 CHANGELOG.md || head -20 CHANGELOG.md || echo "No changelog found"
-    
-#     - name: Skip message
-#       if: steps.changelog-changed.outputs.any_changed != 'true'
-#       run: |
-#         echo "ℹ️ Changelog not updated, skipping custom job"

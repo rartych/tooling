@@ -1,11 +1,20 @@
 # .github/workflows/api-review-reusable.yml
-# 
+#
+# DEPRECATED: This workflow is specific to the Fall25 meta-release and will not be
+# maintained for future releases. The underlying validator (api_review_validator_v0_6.py)
+# is monolithic and not extensible.
+#
+# For release-plan.yaml validation, see: validation/scripts/validate-release-plan.py
+# For future validation workflows, see the validation/ directory.
+#
+# ---
+#
 # CAMARA API Review - Reusable Workflow
-# 
+#
 # Purpose: Performs automated validation of CAMARA API definitions against compliance checklist.
 # Called by: api-review-trigger.yml workflow
 
-name: 'CAMARA API Review - Reusable'
+name: 'CAMARA API Review - Reusable (Deprecated)'
 
 on:
   workflow_call:

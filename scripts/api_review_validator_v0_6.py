@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: This validator is specific to the Fall25 meta-release and will not be
+maintained for future releases. It is monolithic and not extensible.
+
+For release-plan.yaml validation, use: validation/scripts/validate-release-plan.py
+For future API validation needs, see the validation/ directory.
+
+---
+
 CAMARA API Review Validator v0.6
 Automated validation of CAMARA API definitions with comprehensive validation coverage
 

@@ -17,5 +17,12 @@ jobs:
           
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git tag -f $MAJOR
+          
+          # Delete remote major tag if it exists
+          git push origin :refs/tags/$MAJOR 2>/dev/null || echo "Tag $MAJOR doesn't exist yet, creating new one"
+          
+          # Create new major version tag locally
+          git tag -f $MAJOR -m "Floating tag"
+          
+          # Push new major version tag
           git push origin $MAJOR --force

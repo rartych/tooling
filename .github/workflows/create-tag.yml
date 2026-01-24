@@ -31,8 +31,8 @@ jobs:
           
       - name: Configure Git
         run: |
-          git config user.name "${{ secrets.GIT_USER_NAME }}"
-          git config user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
       
       - name: Create and push tag
         run: |

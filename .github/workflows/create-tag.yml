@@ -28,11 +28,11 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch all history for proper tagging
-      
+          
       - name: Configure Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${{ secrets.GIT_USER_NAME }}"
+          git config user.email "${{ secrets.GIT_USER_EMAIL }}"
       
       - name: Create and push tag
         run: |
@@ -41,10 +41,10 @@ jobs:
           
           if [ -z "$TAG_MESSAGE" ]; then
             # Create lightweight tag
-            git tag "$TAG_NAME"
+            git tag -s "$TAG_NAME"
           else
             # Create annotated tag with message
-            git tag -a "$TAG_NAME" -m "$TAG_MESSAGE"
+            git tag -s -a "$TAG_NAME" -m "$TAG_MESSAGE"
           fi
           
           git push origin "$TAG_NAME"
@@ -64,7 +64,7 @@ jobs:
             git push origin :refs/tags/$MAJOR 2>/dev/null || true
             
             # Create and push new major version tag
-            git tag -f $MAJOR
+            git tag -s -f $MAJOR -m "Floating tag"
             git push --force origin "refs/tags/${MAJOR}:refs/tags/${MAJOR}"
             
             echo "Floating tag $MAJOR created/updated successfully"

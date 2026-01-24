@@ -41,10 +41,10 @@ jobs:
           
           if [ -z "$TAG_MESSAGE" ]; then
             # Create lightweight tag
-            git tag -s "$TAG_NAME"
+            git tag "$TAG_NAME"
           else
             # Create annotated tag with message
-            git tag -s -a "$TAG_NAME" -m "$TAG_MESSAGE"
+            git tag -a "$TAG_NAME" -m "$TAG_MESSAGE"
           fi
           
           git push origin "$TAG_NAME"
@@ -64,7 +64,7 @@ jobs:
             git push origin :refs/tags/$MAJOR 2>/dev/null || true
             
             # Create and push new major version tag
-            git tag -s -f $MAJOR -m "Floating tag"
+            git tag -f $MAJOR -m "Floating tag"
             git push --force origin "refs/tags/${MAJOR}:refs/tags/${MAJOR}"
             
             echo "Floating tag $MAJOR created/updated successfully"

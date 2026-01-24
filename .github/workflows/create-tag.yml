@@ -56,8 +56,16 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           MAJOR=$(echo $TAG | cut -d. -f1)
           
+          echo "Processing tag: $TAG"
+          echo "Creating/updating major tag: $MAJOR"
+          
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          git tag -f $MAJOR
-          git push origin $MAJOR --force
+          # Delete remote tag first (ignore errors if it doesn't exist)
+          git push origin :refs/tags/$MAJOR || true
+    
+          # Create and push new tag
+          git tag $MAJOR
+          git push origin refs/tags/$MAJOR
+

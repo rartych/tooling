@@ -86,7 +86,7 @@ jobs:
 
       - name: Report validation status
         if: always() && steps.changes.outputs.release_plan_any_changed == 'true' && steps.exclusivity.outcome != 'failure'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v8
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const valid = '${{ steps.validate.outputs.valid }}' === 'true';

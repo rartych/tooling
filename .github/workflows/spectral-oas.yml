@@ -18,11 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           token: ${{ secrets.PAT || secrets.GITHUB_TOKEN }}
       - name: Checkout linting config
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           repository: camaraproject/tooling
           path: lint-config

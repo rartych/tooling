@@ -44,7 +44,17 @@ jobs:
       - name: Install Spectral OWASP
         run: npm install --save-dev @stoplight/spectral-owasp-ruleset@^2.0
       - name: Run Spectral linting
-        run: spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml
+        run: |
+          spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml > spectral_oas.log 2>&1
+          cat spectral_oas.log
       - name: Run Spectral linting for OWASP
-        run: spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml
-        continue-on-error: true        
+        run: |
+          spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml> spectral_owasp.log 2>&1
+          cat spectral_owasp.log
+        continue-on-error: true   
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: spectral-logs
+          path: *.log

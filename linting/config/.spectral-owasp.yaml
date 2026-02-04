@@ -1,4 +1,8 @@
-# extends: ["https://unpkg.com/@stoplight/spectral-owasp-ruleset/dist/ruleset.mjs"]
+# CAMARA Project - linting ruleset for OWASP API Security Top 10 2023 - documentation avaialable here:
+# https://github.com/camaraproject/Commonalities/blob/main/documentation/Linting-rules.md
+# https://apistylebook.stoplight.io/docs/owasp-top-10-2023
+# Changelog:
+# - 05.02.2026: Initial version
 extends: ["@stoplight/spectral-owasp-ruleset"]
 rules:
 # excluded rules:

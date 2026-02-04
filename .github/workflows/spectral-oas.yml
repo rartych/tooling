@@ -25,7 +25,7 @@ jobs:
       - name: Checkout linting config
         uses: actions/checkout@v6
         with:
-          repository: camaraproject/tooling
+          repository: ${{ github.repository_owner }}/tooling
           path: lint-config
           ref: ${{ inputs.configurations }}
           sparse-checkout: |

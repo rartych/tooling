@@ -190,7 +190,7 @@ jobs:
         if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
         # You can override MegaLinter flavor used to have faster performances
         # c_cpp MegaLinter Flavor https://megalinter.io/latest/flavors/c_cpp/ includes all needed linters - can be upgraded to v8
-        uses: oxsecurity/megalinter/flavors/c_cpp@v7
+        uses: oxsecurity/megalinter/flavors/c_cpp@v9
         # configuration of Megalinter
         env:
           VALIDATE_ALL_CODEBASE: true

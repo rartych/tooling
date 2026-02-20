@@ -169,7 +169,7 @@ jobs:
       # Skipped when release-plan.yaml validation fails (no point linting with invalid rules)
 
       - name: Checkout linting config
-        #if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
+        # if: steps.changes.outputs.release_plan_any_changed != 'true' || steps.validate.outputs.valid == 'true'
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/tooling

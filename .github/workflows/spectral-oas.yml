@@ -2,6 +2,7 @@ name: Execute Spectral with CAMARA ruleset
 # A reusable action for validating PRs using tools configuration from branch indicated by input `configurations` variable
 # CAMARA Project - Github Action 
 # initial version
+# 04.02.2026 refactored steps and added OWASP linting
 
 on:
   workflow_call:
@@ -24,7 +25,7 @@ jobs:
       - name: Checkout linting config
         uses: actions/checkout@v6
         with:
-          repository: camaraproject/tooling
+          repository: ${{ github.repository_owner }}/tooling
           path: lint-config
           ref: ${{ inputs.configurations }}
           sparse-checkout: |
@@ -32,10 +33,28 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Copy specified folder to workspace root
         run: cp -RT ${{ github.workspace }}/lint-config/linting/config ${{ github.workspace }}
-      - name: Install Spectral
-        run: npm install -g @stoplight/spectral
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install Spectral CLI
+        run: npm install -g @stoplight/spectral-cli
       - name: Install Spectral functions
         run: npm install -g @stoplight/spectral-functions
+      - name: Install Spectral OWASP
+        run: npm install --save-dev @stoplight/spectral-owasp-ruleset@^2.0
       - name: Run Spectral linting
-        run: spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml
-        
+        run: |
+          spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral.yaml > spectral_oas.log 2>&1
+          cat spectral_oas.log
+      - name: Run Spectral linting for OWASP
+        run: |
+          spectral lint code/API_definitions/*.yaml --verbose --ruleset ${{ github.workspace }}/.spectral-owasp.yaml> spectral_owasp.log 2>&1
+          cat spectral_owasp.log
+        continue-on-error: true   
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: spectral-logs
+          path: '*.log'

@@ -1,0 +1,3 @@
+extends:
+  - ./.spectral.yaml
+  - ./.spectral-owasp.yaml

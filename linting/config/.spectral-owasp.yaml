@@ -1,0 +1,26 @@
+# CAMARA Project - linting ruleset for OWASP API Security Top 10 2023 - documentation avaialable here:
+# https://github.com/camaraproject/Commonalities/blob/main/documentation/Linting-rules.md
+# https://apistylebook.stoplight.io/docs/owasp-top-10-2023
+# Changelog:
+# - 05.02.2026: Initial version
+extends: ["@stoplight/spectral-owasp-ruleset"]
+rules:
+# excluded rules:
+  owasp:api2:2023-auth-insecure-schemes : off
+  owasp:api2:2023-jwt-best-practices : off
+  owasp:api2:2023-no-http-basic : off
+  owasp:api4:2023-integer-limit : off
+  owasp:api4:2023-rate-limit : off
+  owasp:api4:2023-rate-limit-retry-after : off
+  owasp:api4:2023-rate-limit-responses-429 : off
+  owasp:api8:2023-define-cors-origin : off
+  owasp:api8:2023-define-error-responses-500 : off
+  owasp:api9:2023-inventory-access : off
+  owasp:api9:2023-inventory-environment : off
+
+# modified severity level:
+  owasp:api8:2023-define-error-responses-401 : error
+  owasp:api4:2023-string-limit : warn
+  owasp:api4:2023-integer-format: warn
+  owasp:api4:2023-integer-limit-legacy: warn
+  owasp:api4:2023-array-limit : warn

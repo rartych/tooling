@@ -1,0 +1,17 @@
+# Release Automation Reusable Workflow (placeholder)
+#
+# This placeholder enables GitHub Actions to resolve workflow_call references
+# to this file. The full implementation lives on the 'release-automation' branch.
+#
+# This file will be replaced when the release-automation branch merges to main.
+
+name: Release Automation
+
+on:
+  workflow_call:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Placeholder. Full implementation on the release-automation branch."

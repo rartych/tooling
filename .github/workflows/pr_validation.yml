@@ -44,7 +44,7 @@ jobs:
 
       - name: Detect changed files
         id: changes
-        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
+        uses: tj-actions/changed-files@8cba46e29c11878d930bca7870bb54394d3e8b21 # v47.0.2
         with:
           files_yaml: |
             release_plan:
@@ -114,15 +114,23 @@ jobs:
             }
 
             // Create separate check status (visible in PR checks list)
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: valid ? 'success' : 'failure',
-              context: '--> Validate: release-plan.yaml',
-              description: description,
-              target_url: runUrl
-            });
+            try {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.sha,
+                state: valid ? 'success' : 'failure',
+                context: '--> Validate: release-plan.yaml',
+                description: description,
+                target_url: runUrl
+              });
+            } catch (error) {
+              if (error.status === 403) {
+                core.warning('Cannot post commit status — insufficient permissions (common for fork PRs). Validation result: ' + description);
+              } else {
+                throw error;
+              }
+            }
 
             if (!valid) {
               // Output errors as annotations

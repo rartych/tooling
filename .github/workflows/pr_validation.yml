@@ -186,7 +186,7 @@ jobs:
         working-directory: code/API_definitions
         run: |
           set +e
-          OUTPUT=$(redocly bundle --config redocly.yaml 2>&1)
+          OUTPUT=$(redocly bundle --config redocly.yaml 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
           EXIT_CODE=$?
           set -e
 

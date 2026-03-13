@@ -238,6 +238,8 @@ jobs:
           FILE=$(basename '${{ matrix.output }}')
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
           echo "file=$FILE"                   >> "$GITHUB_OUTPUT"
+          echo "artifact_name=$ARTIFACT_NAME" 
+          echo "file=$FILE"
  
       - name: Upload bundle — ${{ matrix.name }}
         uses: actions/upload-artifact@v7
@@ -277,8 +279,8 @@ jobs:
             NAME=$(echo "$api" | jq -r '.name')
             FILE=$(echo "$api" | jq -r '.output' | xargs basename)
  
-            # Artifact name as set by upload-bundles job (GitHub sanitises @ → -)
-            ARTIFACT_NAME="bundle-${NAME}"
+            # Must match the sanitised name produced by the upload-bundles job
+            ARTIFACT_NAME="bundle-$(echo "${NAME}" | tr '@/: ' '-')"
             ID=$(echo "$ARTIFACTS" | jq -r \
               --arg n "$ARTIFACT_NAME" \
               '.artifacts[] | select(.name == $n) | .id')

@@ -226,45 +226,76 @@ jobs:
 
           exit $EXIT_CODE
 
-      # ── 5. Upload each bundle as a separate artifact, collect direct URLs ────
-      # Uses @actions/artifact v2 (same package upload-artifact@v4 uses) so we
-      # get an artifact id back and can build a direct download URL per bundle.
+      # ── Upload each bundle as a separate artifact, collect direct URLs ────
+       # @actions/artifact@1 uses ACTIONS_RUNTIME_TOKEN + ACTIONS_RUNTIME_URL
+      # which are always present in the runner environment.
+      # After all uploads, the GitHub REST API is queried to resolve each
+      # artifact name → id → direct download URL.
       - name: Upload bundle artifacts
         id: upload
         working-directory: ${{ github.workspace }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm install --prefix /tmp/artifact-uploader @actions/artifact 2>/dev/null
+          npm install --prefix /tmp/artifact-uploader @actions/artifact@1 2>/dev/null
  
           node << 'EOF'
-          const { DefaultArtifactClient } = require('/tmp/artifact-uploader/node_modules/@actions/artifact');
-          const fs   = require('fs');
-          const path = require('path');
+          const artifactClient = require('/tmp/artifact-uploader/node_modules/@actions/artifact');
+          const https  = require('https');
+          const fs     = require('fs');
+          const path   = require('path');
+ 
+          function githubGet(urlPath) {
+            return new Promise((resolve, reject) => {
+              const options = {
+                hostname: 'api.github.com',
+                path:     urlPath,
+                headers: {
+                  'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+                  'User-Agent':    'bundle-diff-workflow',
+                  'Accept':        'application/vnd.github+json',
+                },
+              };
+              https.get(options, res => {
+                let body = '';
+                res.on('data', chunk => body += chunk);
+                res.on('end', () => resolve(JSON.parse(body)));
+              }).on('error', reject);
+            });
+          }
  
           async function main() {
-            const client = new DefaultArtifactClient();
-            const apis   = JSON.parse(fs.readFileSync('/tmp/apis.json', 'utf8'));
-            const repo   = process.env.GITHUB_REPOSITORY;
-            const runId  = process.env.GITHUB_RUN_ID;
-            const root   = path.join(process.env.GITHUB_WORKSPACE, 'code/API_definitions');
-            const links  = [];
+            const client   = artifactClient.create();
+            const apis     = JSON.parse(fs.readFileSync('/tmp/apis.json', 'utf8'));
+            const repo     = process.env.GITHUB_REPOSITORY;
+            const runId    = process.env.GITHUB_RUN_ID;
+            const root     = path.join(process.env.GITHUB_WORKSPACE, 'code/API_definitions');
+            const uploaded = [];
  
+            // Upload each bundle as its own artifact
             for (const api of apis) {
               const artifactName = `bundle-${api.name.replace(/[@/: ]/g, '-')}`;
               const absOut       = path.join(root, api.output);
               const uploadDir    = path.dirname(absOut);
-              const fileName     = path.basename(absOut);
  
               console.log(`Uploading ${artifactName} ...`);
-              const { id } = await client.uploadArtifact(
-                artifactName,
-                [absOut],
-                uploadDir
-              );
- 
-              const url = `https://github.com/${repo}/actions/runs/${runId}/artifacts/${id}`;
-              links.push(`- [\`${fileName}\`](${url}) — \`${api.name}\``);
-              console.log(`  → ${url}`);
+              await client.uploadArtifact(artifactName, [absOut], uploadDir);
+              uploaded.push({ artifactName, fileName: path.basename(absOut), apiName: api.name });
             }
+ 
+            // Resolve artifact IDs via GitHub REST API
+            const { artifacts } = await githubGet(
+              `/repos/${repo}/actions/runs/${runId}/artifacts`
+            );
+            const idByName = Object.fromEntries(artifacts.map(a => [a.name, a.id]));
+ 
+            // Build per-artifact direct download links
+            const links = uploaded.map(({ artifactName, fileName, apiName }) => {
+              const id  = idByName[artifactName];
+              const url = `https://github.com/${repo}/actions/runs/${runId}/artifacts/${id}`;
+              console.log(`  ${artifactName} → id=${id}  ${url}`);
+              return `- [\`${fileName}\`](${url}) — \`${apiName}\``;
+            });
  
             fs.appendFileSync(
               process.env.GITHUB_OUTPUT,

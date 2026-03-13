@@ -170,15 +170,39 @@ jobs:
         if: steps.changes.outputs.release_plan_any_changed != 'true'
         run: echo "::notice::release-plan.yaml not modified, skipping validation"
 
-      # ── Set up Node.js ──────────────────────────────────────────────────
+      # ──  Install tooling ──────────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24'
 
-      # ── Install Redocly CLI ─────────────────────────────────────────────
       - name: Install Redocly CLI
         run: npm install -g @redocly/cli@latest
+
+      - name: Install oasdiff CLI
+        working-directory: ${{ github.workspace }}
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/oasdiff/oasdiff/main/install.sh \
+            | sh -s -- -b /usr/local/bin
+ 
+      - name: Install yq
+        uses: mikefarah/yq@v4
+
+      - name: Extract API list from redocly.yaml
+        id: api-list
+        run: |
+          API_JSON=$(yq e '
+            .apis | to_entries |
+            map({
+              "name":   .key,
+              "root":   .value.root,
+              "output": .value.output
+            })' \
+            --output-format=json redocly.yaml)
+ 
+          echo "$API_JSON" > /tmp/apis.json
+          echo "Parsed $(echo "$API_JSON" | jq length) API(s):"
+          echo "$API_JSON" | jq -r '.[] | "  • \(.name)  root=\(.root)  output=\(.output)"'
 
       # ── Bundle all APIs defined in redocly.yaml ───────────────────────
       - name: Bundle API specs
@@ -200,90 +224,177 @@ jobs:
 
           exit $EXIT_CODE
 
-
-      # ── Commit bundles back to the source branch ────────────────────────
-      - name: Commit bundles to source branch
-        if: always()
+      # ── 5. Upload each bundle as a separate artifact, collect direct URLs ────
+      # Uses @actions/artifact v2 (same package upload-artifact@v4 uses) so we
+      # get an artifact id back and can build a direct download URL per bundle.
+      - name: Upload bundle artifacts
+        id: upload
+        working-directory: ${{ github.workspace }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add code/API_definitions/*.yaml
-
-          if git diff --cached --quiet; then
-            echo "No bundle changes to commit."
-            echo "artifact_committed=false" >> "$GITHUB_ENV"
-          else
-            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-7)
-            git commit -m "chore: redocly bundle @ ${SHORT_SHA} [skip ci]"
-            git push origin HEAD:${{ github.head_ref }}
-            echo "artifact_committed=true" >> "$GITHUB_ENV"
-          fi
-
-      # ── Post / update PR comment ────────────────────────────────────────
-      - name: Post build results to PR
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const exitCode    = '${{ steps.build.outputs.exit_code }}';
-            const buildOutput = `${{ steps.build.outputs.build_output }}`;
-            const artifactSaved = process.env.artifact_committed === 'true';
-            const success       = exitCode === '0';
-            const icon          = success ? '\u2705' : '\u274c';
-            const status        = success ? 'succeeded' : 'failed';
-
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const sha    = context.payload.pull_request?.head?.sha ?? context.sha;
-            const branch = context.payload.pull_request?.head?.ref ?? 'unknown';
-
-            const commitLine = artifactSaved
-              ? `**Bundles committed to \`${branch}\`** \u2192 \`code/API_definitions/\``
-              : '_No bundle changes detected (specs unchanged)._';
-
-            const body = [
-              `## ${icon} Redocly Bundle ${status}`,
-              '',
-              `**Commit:** \`${sha.substring(0, 7)}\`  |  **Run:** [${context.runId}](${runUrl})`,
-              '',
-              commitLine,
-              '',
-              '<details>',
-              '<summary>Full redocly output (click to expand)</summary>',
-              '',
-              buildOutput.trim() || '_(no output)_',
-              '</details>',
-            ].join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner:        context.repo.owner,
-              repo:         context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const existing = comments.find(
-              c => c.user.type === 'Bot' &&
-                   (c.body.startsWith('## \u2705 Redocly Bundle') ||
-                    c.body.startsWith('## \u274c Redocly Bundle'))
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner:      context.repo.owner,
-                repo:       context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner:        context.repo.owner,
-                repo:         context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
+          npm install --prefix /tmp/artifact-uploader @actions/artifact 2>/dev/null
+ 
+          node << 'EOF'
+          const { DefaultArtifactClient } = require('/tmp/artifact-uploader/node_modules/@actions/artifact');
+          const fs   = require('fs');
+          const path = require('path');
+ 
+          async function main() {
+            const client = new DefaultArtifactClient();
+            const apis   = JSON.parse(fs.readFileSync('/tmp/apis.json', 'utf8'));
+            const repo   = process.env.GITHUB_REPOSITORY;
+            const runId  = process.env.GITHUB_RUN_ID;
+            const root   = path.join(process.env.GITHUB_WORKSPACE, 'code/API_definitions');
+            const links  = [];
+ 
+            for (const api of apis) {
+              const artifactName = `bundle-${api.name.replace(/[@/: ]/g, '-')}`;
+              const absOut       = path.join(root, api.output);
+              const uploadDir    = path.dirname(absOut);
+              const fileName     = path.basename(absOut);
+ 
+              console.log(`Uploading ${artifactName} ...`);
+              const { id } = await client.uploadArtifact(
+                artifactName,
+                [absOut],
+                uploadDir
+              );
+ 
+              const url = `https://github.com/${repo}/actions/runs/${runId}/artifacts/${id}`;
+              links.push(`- [\`${fileName}\`](${url}) — \`${api.name}\``);
+              console.log(`  → ${url}`);
             }
+ 
+            fs.appendFileSync(
+              process.env.GITHUB_OUTPUT,
+              `links<<LINKS_EOF\n${links.join('\n')}\nLINKS_EOF\n`
+            );
+          }
+ 
+          main().catch(err => { console.error(err); process.exit(1); });
+          EOF
+ 
+      # ── For each API: fetch base bundle from main, run oasdiff ────────────
+      - name: Diff all APIs against main
+        id: diff
+        run: |
+          HAS_BREAKING=false
+          COMMENT_BODY=""
+ 
+          jq -c '.[]' /tmp/apis.json | while IFS= read -r api; do
+            NAME=$(echo "$api" | jq -r '.name')
+            OUT=$(echo "$api"  | jq -r '.output')
+            ROOT=$(echo "$api" | jq -r '.root')
+            BASE_BUNDLE="/tmp/base_$(basename "$OUT")"
+ 
+            echo "::group::Diffing $NAME"
+ 
+            # Resolve base: committed bundle on main > bundle main source > skip
+            if git show origin/main:"code/API_definitions/$OUT" \
+                > "$BASE_BUNDLE" 2>/dev/null; then
+              BASE_SOURCE="bundle from \`main\`"
+            elif git show origin/main:"code/API_definitions/$ROOT" \
+                > /tmp/base_source.yaml 2>/dev/null; then
+              redocly bundle /tmp/base_source.yaml \
+                --output "$BASE_BUNDLE" --ext yaml --force
+              BASE_SOURCE="built from source on \`main\`"
+            else
+              echo "  $NAME not found on main — skipping diff (new API)"
+              COMMENT_BODY="${COMMENT_BODY}
+          ### \`${NAME}\` — 🆕 New API (no base to diff against)
+ 
+          ---
+          "
+              echo "::endgroup::"
+              continue
+            fi
+ 
+            # Full changelog
+            CHANGELOG=$(oasdiff changelog --format markdown "$BASE_BUNDLE" "$OUT" 2>&1) || true
+            [ -z "$CHANGELOG" ] && CHANGELOG="_No changes._"
+ 
+            # Breaking changes
+            BREAKING=$(oasdiff breaking --format markdown "$BASE_BUNDLE" "$OUT" 2>&1)
+            BREAK_EXIT=$?
+ 
+            if [ "$BREAK_EXIT" -ne 0 ] && [ -n "$BREAKING" ]; then
+              BADGE="🔴 Breaking changes"
+              HAS_BREAKING=true
+            else
+              BADGE="🟢 No breaking changes"
+              BREAKING="_None._"
+            fi
+ 
+            COMMENT_BODY="${COMMENT_BODY}
+          ### \`${NAME}\` — ${BADGE}
+          > Base: ${BASE_SOURCE}
+ 
+          <details>
+          <summary>📋 Full changelog</summary>
+ 
+          ${CHANGELOG}
+ 
+          </details>
+ 
+          <details>
+          <summary>💥 Breaking changes only</summary>
+ 
+          ${BREAKING}
+ 
+          </details>
+ 
+          ---
+          "
+            echo "::endgroup::"
+          done
+ 
+          {
+            echo "has_breaking=$HAS_BREAKING"
+            echo "comment_body<<ENDOFBODY"
+            echo "$COMMENT_BODY"
+            echo "ENDOFBODY"
+          } >> "$GITHUB_OUTPUT"
 
-
+      # ── Post / update collapsible PR comment ────────────────────────────────
+      - name: Find existing bot comment
+        uses: peter-evans/find-comment@v3
+        id: find-comment
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '<!-- oasdiff-report -->'
+ 
+      - name: Create or update PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            <!-- oasdiff-report -->
+            ## API Spec — Bundle & Diff
+ 
+            Commit: `${{ github.event.pull_request.head.sha }}`
+            Branch: `${{ github.head_ref }}` → `main`
+ 
+            ### 📦 Bundle downloads
+            > Artifacts are retained for 30 days. Downloading requires a GitHub login.
+ 
+            ${{ steps.upload.outputs.links }}
+ 
+            <details>
+            <summary>🔧 Redocly bundle output</summary>
+ 
+            ```
+            ${{ steps.build.outputs.build_output }}
+            ```
+ 
+            </details>
+ 
+            ---
+ 
+            ${{ steps.diff.outputs.comment_body }}
+ 
+ 
 
       # ==================== MegaLinter ====================
       # Runs when:

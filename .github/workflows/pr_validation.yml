@@ -191,6 +191,8 @@ jobs:
       - name: Extract API list from redocly.yaml
         id: api-list
         run: |
+          REDOCLY_YAML="code/API_definitions/redocly.yaml"
+ 
           API_JSON=$(yq e '
             .apis | to_entries |
             map({
@@ -198,7 +200,7 @@ jobs:
               "root":   .value.root,
               "output": .value.output
             })' \
-            --output-format=json src/redocly.yaml)
+            --output-format=json "$REDOCLY_YAML")
  
           echo "$API_JSON" > /tmp/apis.json
           echo "Parsed $(echo "$API_JSON" | jq length) API(s):"

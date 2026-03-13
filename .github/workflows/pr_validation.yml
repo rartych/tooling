@@ -198,7 +198,7 @@ jobs:
               "root":   .value.root,
               "output": .value.output
             })' \
-            --output-format=json redocly.yaml)
+            --output-format=json src/redocly.yaml)
  
           echo "$API_JSON" > /tmp/apis.json
           echo "Parsed $(echo "$API_JSON" | jq length) API(s):"

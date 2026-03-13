@@ -201,7 +201,8 @@ jobs:
               "output": .value.output
             })' \
             --output-format=json "$REDOCLY_YAML")
- 
+            
+          echo "$API_JSON"
           echo "$API_JSON" > /tmp/apis.json
           echo "Parsed $(echo "$API_JSON" | jq length) API(s):"
           echo "$API_JSON" | jq -r '.[] | "  • \(.name)  root=\(.root)  output=\(.output)"'
@@ -279,6 +280,7 @@ jobs:
               const uploadDir    = path.dirname(absOut);
  
               console.log(`Uploading ${artifactName} ...`);
+              console.log(`In absolute ${absOut}`);
               await client.uploadArtifact(artifactName, [absOut], uploadDir);
               uploaded.push({ artifactName, fileName: path.basename(absOut), apiName: api.name });
             }
